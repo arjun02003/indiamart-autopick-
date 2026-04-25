@@ -1,0 +1,205 @@
+{
+  "config": {
+    "id": 1,
+    "keywords": [],
+    "countries": [],
+    "interval": 30,
+    "is_running": true,
+    "cookies": []
+  },
+  "leads": [],
+  "logs": [
+    {
+      "timestamp": "2026-04-24T16:48:22.290Z",
+      "message": "Worker started with interval 30s",
+      "type": "INFO",
+      "id": 1777049302987
+    },
+    {
+      "timestamp": "2026-04-24T16:48:22.293Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049302862
+    },
+    {
+      "timestamp": "2026-04-24T16:48:22.295Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049302496
+    },
+    {
+      "timestamp": "2026-04-24T16:48:52.303Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049332633
+    },
+    {
+      "timestamp": "2026-04-24T16:48:52.305Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049332802
+    },
+    {
+      "timestamp": "2026-04-24T16:49:22.303Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049363018
+    },
+    {
+      "timestamp": "2026-04-24T16:49:22.304Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049362337
+    },
+    {
+      "timestamp": "2026-04-24T16:49:52.320Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049393254
+    },
+    {
+      "timestamp": "2026-04-24T16:49:52.321Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049393301
+    },
+    {
+      "timestamp": "2026-04-24T16:50:22.330Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049423264
+    },
+    {
+      "timestamp": "2026-04-24T16:50:22.332Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049422709
+    },
+    {
+      "timestamp": "2026-04-24T16:50:52.335Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049452863
+    },
+    {
+      "timestamp": "2026-04-24T16:50:52.338Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049453264
+    },
+    {
+      "timestamp": "2026-04-24T16:51:22.336Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049482572
+    },
+    {
+      "timestamp": "2026-04-24T16:51:22.340Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049482484
+    },
+    {
+      "timestamp": "2026-04-24T16:52:42.816Z",
+      "message": "Worker started with interval 30s",
+      "type": "INFO",
+      "id": 1777049563724
+    },
+    {
+      "timestamp": "2026-04-24T16:52:42.820Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049563607
+    },
+    {
+      "timestamp": "2026-04-24T16:52:42.822Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049563670
+    },
+    {
+      "timestamp": "2026-04-24T16:53:12.830Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049593002
+    },
+    {
+      "timestamp": "2026-04-24T16:53:12.831Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049593388
+    },
+    {
+      "timestamp": "2026-04-24T16:53:42.840Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049623431
+    },
+    {
+      "timestamp": "2026-04-24T16:53:42.841Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049623383
+    },
+    {
+      "timestamp": "2026-04-24T16:54:12.849Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049653207
+    },
+    {
+      "timestamp": "2026-04-24T16:54:12.851Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049653728
+    },
+    {
+      "timestamp": "2026-04-24T16:54:42.861Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049683810
+    },
+    {
+      "timestamp": "2026-04-24T16:54:42.861Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049683269
+    },
+    {
+      "timestamp": "2026-04-24T16:55:12.861Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049713098
+    },
+    {
+      "timestamp": "2026-04-24T16:55:12.862Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049713615
+    },
+    {
+      "timestamp": "2026-04-24T16:55:42.864Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049743533
+    },
+    {
+      "timestamp": "2026-04-24T16:55:42.865Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049743834
+    },
+    {
+      "timestamp": "2026-04-24T16:56:12.872Z",
+      "message": "Starting lead fetch cycle...",
+      "type": "FETCH",
+      "id": 1777049773330
+    },
+    {
+      "timestamp": "2026-04-24T16:56:12.872Z",
+      "message": "No cookies provided, skipping fetch.",
+      "type": "ERROR",
+      "id": 1777049773015
+    }
+  ]
+}
