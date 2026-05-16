@@ -30,7 +30,7 @@ export function LeadProvider({ children }) {
   const connectSSE = useCallback(() => {
     if (sseRef.current) sseRef.current.close();
     const sseUrl = process.env.NODE_ENV === 'production'
-      ? '/api/events'
+      ? 'https://indiamart-autopick-1-5ayn.onrender.com/api/events'
       : `http://${window.location.hostname}:3001/api/events`;
     const es = new EventSource(sseUrl);
 

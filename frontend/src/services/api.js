@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const BASE = process.env.NODE_ENV === 'production' 
-  ? '/api' 
+  ? 'https://indiamart-autopick-1-5ayn.onrender.com/api' 
   : `http://${window.location.hostname}:3001/api`;
 
 const api = axios.create({ baseURL: BASE, timeout: 15000 });

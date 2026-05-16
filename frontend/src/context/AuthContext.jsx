@@ -15,7 +15,8 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
 
   const signup = async (email, password) => {
-    const response = await fetch('/api/auth/signup', {
+    const url = (process.env.NODE_ENV === 'production' ? 'https://indiamart-autopick-1-5ayn.onrender.com' : '') + '/api/auth/signup';
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -24,7 +25,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const response = await fetch('/api/auth/login', {
+    const url = (process.env.NODE_ENV === 'production' ? 'https://indiamart-autopick-1-5ayn.onrender.com' : '') + '/api/auth/login';
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
