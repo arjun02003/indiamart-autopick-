@@ -30,7 +30,7 @@ export default function Login() {
         }
       }
     } catch (err) {
-      setError('Something went wrong. Try again.');
+      setError(err.message || 'Network error. Is the backend running?');
     } finally {
       setLoading(false);
     }
