@@ -15,53 +15,13 @@ app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Session & Passport
-app.use(session({
-  secret: 'indiamart-secret',
-  resave: false,
-  saveUninitialized: false
-}));
-app.use(passport.initialize());
-app.use(passport.session());
-
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((user, done) => done(null, user));
-
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID || 'dummy',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy',
-    callbackURL: "/api/auth/google/callback",
-    proxy: true
-  },
-  (accessToken, refreshToken, profile, done) => {
-    const email = profile.emails[0].value;
-    // Allow any email for now, but you can restrict it here
-    return done(null, { id: profile.id, email });
-  }
-));
-
-// Google Auth Routes
-app.get('/api/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-app.get('/api/auth/google/callback', 
-  passport.authenticate('google', { failureRedirect: '/login' }),
-  (req, res) => {
-    res.redirect('/');
-  }
-);
-
+// Auth Routes (Bypass)
 app.get('/api/auth/me', (req, res) => {
-  if (req.isAuthenticated()) {
-    res.json({ success: true, user: req.user });
-  } else {
-    res.status(401).json({ success: false });
-  }
+  res.json({ success: true, user: { name: 'Admin' } });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  req.logout(() => {
-    res.json({ success: true });
-  });
+  res.json({ success: true });
 });
 
 /* ── Health check ─────────────────────────────────────────────── */

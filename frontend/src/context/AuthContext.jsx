@@ -5,45 +5,21 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me');
-      const data = await response.json();
-      if (data.success) {
-        setIsAuthenticated(true);
-        setUser(data.user);
-      } else {
-        setIsAuthenticated(false);
-      }
-    } catch (e) {
-      setIsAuthenticated(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [user, setUser] = useState({ name: 'Admin' });
+  const [loading, setLoading] = useState(false);
 
   const loginWithGoogle = () => {
-    window.location.href = '/api/auth/google';
+    // No action needed
   };
 
-  const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setIsAuthenticated(false);
-    setUser(null);
-    window.location.href = '/login';
+  const logout = () => {
+    // No action needed
   };
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, loading, loginWithGoogle, logout }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
