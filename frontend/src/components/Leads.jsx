@@ -136,12 +136,23 @@ export default function Leads() {
                       }
                     </td>
                     <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
-                      {lead.status !== 'Accepted' && (
-                        <button className="btn btn-sm btn-success" onClick={() => handleAccept(lead.id)}>Accept</button>
-                      )}
-                      {lead.status !== 'Skipped' && (
-                        <button className="btn btn-sm btn-danger" style={{ marginLeft: '0.5rem' }} onClick={() => handleSkip(lead.id)}>Skip</button>
-                      )}
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {lead.status !== 'Accepted' && (
+                          <button className="btn btn-sm btn-success" onClick={() => handleAccept(lead.id)}>Accept</button>
+                        )}
+                        {lead.status !== 'Skipped' && (
+                          <button className="btn btn-sm btn-danger" onClick={() => handleSkip(lead.id)}>Skip</button>
+                        )}
+                        <a 
+                          href={`https://seller.indiamart.com/leadmanager/contactlist?id=${lead.lead_id}`} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="btn btn-sm btn-outline"
+                          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                        >
+                          👁️ View Chat
+                        </a>
+                      </div>
                     </td>
                   </tr>
                   {expanded === lead.id && (

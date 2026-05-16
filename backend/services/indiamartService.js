@@ -130,7 +130,7 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
   return withRetry(async () => {
     const response = await axios.post(
       CONTACT_LIST_URL,
-      {},                          // ← empty JSON body (NOT urlencoded)
+      { modid: 'FRESH', mod_id: 'FRESH' }, // Target the "Fresh" leads folder
       {
         headers: {
           ...DEFAULT_HEADERS,
@@ -139,7 +139,6 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
         },
         proxy   : buildProxy(proxyUrl),
         timeout : 30000,
-        maxRedirects: 5,
       }
     );
 
@@ -188,7 +187,7 @@ async function sendMessage(cookiesRaw, leadId, messageText, proxyUrl = '') {
   return withRetry(async () => {
     const response = await axios.post(
       SEND_MESSAGE_URL,
-      { I_REQ_ID: leadId, msgbody: messageText, type: 'REPLY' },  // JSON body
+      { I_REQ_ID: leadId, msgbody: messageText, type: 'QUERY' },  // QUERY is more visible than REPLY
       {
         headers: {
           ...DEFAULT_HEADERS,
