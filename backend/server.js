@@ -73,6 +73,16 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`✅ Backend running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Backend running on http://localhost:${PORT}`);
+  
+  // Auto-start worker ONLY if it was previously running
+  const config = db.prepare('SELECT is_running FROM config WHERE id = 1').get();
+  if (config && config.is_running === 1) {
+    worker.startWorker(broadcast);
+  } else {
+    console.log('ℹ️ Auto Mode is OFF. Waiting for user to start it manually.');
+  }
+});
 
 module.exports = app;

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Notifications from './Notifications';
 
 export default function Layout() {
-  const { isRunning, stats } = useLeadSystem();
+  const { isRunning, stats, toggleAutoMode } = useLeadSystem();
   const { logout } = useAuth();
 
   return (
@@ -15,8 +15,12 @@ export default function Layout() {
           <h1>IndiaMART</h1>
         </div>
 
-        {/* Worker status pill */}
-        <div className={`worker-pill ${isRunning ? 'running' : 'stopped'}`}>
+        {/* Worker status pill - Now a clickable toggle */}
+        <div 
+          className={`worker-pill ${isRunning ? 'running' : 'stopped'}`} 
+          onClick={toggleAutoMode}
+          title={isRunning ? "Click to Stop Automation" : "Click to Start Automation"}
+        >
           {isRunning
             ? <><span className="pulse-dot"></span> Auto Mode ON</>
             : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#64748b', display: 'inline-block' }}></span> Auto Mode OFF</>
