@@ -113,6 +113,10 @@ async function runCycle() {
   }
 
   log('INFO', `📥 Fetched ${leads.length} leads from IndiaMART`);
+  
+  // ── SORT BY TIMESTAMP (Newest first)
+  leads.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
   if (leads.length === 0) {
     log('INFO', 'No leads in response (check cookies/session or no new leads available)');
   }

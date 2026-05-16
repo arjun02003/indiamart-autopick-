@@ -101,6 +101,7 @@ function normalizeLead(lead) {
     email        : lead.contacts_email   || lead.SENDER_EMAIL   || '',
     quantity     : parseQuantity(lead),
     message      : lead.last_message     || lead.QUERY_MSSAGE   || lead.QUERY_MESSAGE || '',
+    timestamp    : lead.contacts_updated_at || lead.I_QUERY_TIME || lead.QUERY_TIME || new Date().toISOString()
   };
 }
 
@@ -130,7 +131,12 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
   return withRetry(async () => {
     const response = await axios.post(
       CONTACT_LIST_URL,
-      {}, // Fetch all contacts without filtering for just "Fresh"
+      { 
+        start : 0, 
+        limit : 100, 
+        modid : 'ALL', 
+        folder: 'ALL' 
+      }, // Fetch the most recent 100 leads from all folders
       {
         headers: {
           ...DEFAULT_HEADERS,
