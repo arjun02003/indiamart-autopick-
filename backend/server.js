@@ -1,87 +1,61 @@
 const express = require('express');
-const cors = require('cors');
-const db = require('./db');
-const { startWorker, stopWorker, isWorkerRunning } = require('./worker');
+const cors    = require('cors');
+const apiRoutes  = require('./routes/api');
+const authRoutes = require('./routes/auth');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// Get configuration
-app.get('/api/config', (req, res) => {
-  const config = db.prepare('SELECT * FROM config WHERE id = 1').get();
-  res.json({
-    ...config,
-    keywords: JSON.parse(config.keywords),
-    countries: JSON.parse(config.countries),
-    cookies: JSON.parse(config.cookies),
-    is_running: config.is_running === 1
-  });
+// SSE client registry
+const sseClients = new Set();
+
+app.use(cors({ origin: '*' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+/* ── Health check ─────────────────────────────────────────────── */
+app.get('/', (_req, res) => res.json({ status: 'ok', message: '🚀 IndiaMART Lead System API' }));
+
+/* ── SSE — Real-time event stream ─────────────────────────────── */
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  // Send heartbeat immediately
+  res.write('event: ping\ndata: connected\n\n');
+
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) res.write('event: ping\ndata: heartbeat\n\n');
+  }, 25000);
+
+  sseClients.add(res);
+  req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
 });
 
-// Update configuration
-app.post('/api/config', (req, res) => {
-  const { keywords, countries, interval, cookies } = req.body;
-  const current = db.prepare('SELECT * FROM config WHERE id = 1').get();
-  
-  db.prepare(`
-    UPDATE config 
-    SET keywords = ?, countries = ?, interval = ?, cookies = ?
-    WHERE id = 1
-  `).run(
-    JSON.stringify(keywords !== undefined ? keywords : JSON.parse(current.keywords)),
-    JSON.stringify(countries !== undefined ? countries : JSON.parse(current.countries)),
-    interval !== undefined ? interval : current.interval,
-    JSON.stringify(cookies !== undefined ? cookies : JSON.parse(current.cookies))
-  );
-  
-  res.json({ success: true });
-});
-
-// Toggle start/stop
-app.post('/api/toggle', (req, res) => {
-  const { is_running } = req.body;
-  db.prepare('UPDATE config SET is_running = ? WHERE id = 1').run(is_running ? 1 : 0);
-  
-  if (is_running) {
-    startWorker();
-  } else {
-    stopWorker();
+/* ── Broadcast helper (used by worker) ────────────────────────── */
+function broadcast(event, data) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    if (!client.writableEnded) client.write(payload);
   }
-  
-  res.json({ success: true, is_running });
-});
-
-// Get Dashboard Stats
-app.get('/api/stats', (req, res) => {
-  const total = db.prepare('SELECT COUNT(*) as count FROM leads').get().count;
-  const accepted = db.prepare('SELECT COUNT(*) as count FROM leads WHERE status = "Accepted"').get().count;
-  const failed = db.prepare('SELECT COUNT(*) as count FROM leads WHERE status = "Failed"').get().count;
-  
-  // Get last check time from logs
-  const lastCheck = db.prepare('SELECT timestamp FROM logs WHERE type = "FETCH" ORDER BY id DESC LIMIT 1').get();
-  
-  res.json({
-    total,
-    accepted,
-    failed,
-    lastCheckTime: lastCheck ? lastCheck.timestamp : null
-  });
-});
-
-// Get Leads (Activity Log)
-app.get('/api/leads', (req, res) => {
-  const leads = db.prepare('SELECT * FROM leads ORDER BY id DESC LIMIT 100').all();
-  res.json(leads);
-});
-
-// Sync worker state on boot
-const currentConfig = db.prepare('SELECT is_running FROM config WHERE id = 1').get();
-if (currentConfig.is_running === 1) {
-  startWorker();
 }
 
-const PORT = 3001;
-app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+// Attach broadcast to app so routes/worker can access it
+app.locals.broadcast = broadcast;
+
+/* ── Routes ────────────────────────────────────────────────────── */
+app.use('/api',      apiRoutes);
+app.use('/api/auth', authRoutes);
+
+/* ── Global error handler ──────────────────────────────────────── */
+app.use((err, _req, res, _next) => {
+  console.error('[Server Error]', err.message);
+  res.status(500).json({ error: err.message });
 });
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`✅ Backend running on http://localhost:${PORT}`));
+
+module.exports = app;

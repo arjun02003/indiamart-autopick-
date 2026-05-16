@@ -1,43 +1,32 @@
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Settings as SettingsIcon, Activity } from 'lucide-react';
-import Dashboard from './components/Dashboard';
-import Settings from './components/Settings';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Dashboard   from './components/Dashboard';
+import Leads       from './components/Leads';
+import Settings    from './components/Settings';
 import ActivityLog from './components/ActivityLog';
+import Login       from './components/Login';
+import Layout      from './components/Layout';
+import PrivateRoute from './components/PrivateRoute';
 import { LeadProvider } from './context/LeadContext';
+import { AuthProvider } from './context/AuthContext';
 
 function App() {
   return (
-    <LeadProvider>
-      <BrowserRouter>
-        <div className="app-container">
-          <aside className="sidebar glass-panel">
-            <h1>IndiaMART System</h1>
-            <nav>
-              <NavLink to="/" className={({isActive}) => isActive ? "nav-link active" : "nav-link"}>
-                <LayoutDashboard size={20} />
-                Dashboard
-              </NavLink>
-              <NavLink to="/logs" className={({isActive}) => isActive ? "nav-link active" : "nav-link"}>
-                <Activity size={20} />
-                Activity Log
-              </NavLink>
-              <NavLink to="/settings" className={({isActive}) => isActive ? "nav-link active" : "nav-link"}>
-                <SettingsIcon size={20} />
-                Settings
-              </NavLink>
-            </nav>
-          </aside>
-          
-          <main className="main-content">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/logs" element={<ActivityLog />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </main>
-        </div>
-      </BrowserRouter>
-    </LeadProvider>
+    <AuthProvider>
+      <LeadProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+              <Route index       element={<Dashboard />} />
+              <Route path="leads"    element={<Leads />} />
+              <Route path="logs"     element={<ActivityLog />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </LeadProvider>
+    </AuthProvider>
   );
 }
 
