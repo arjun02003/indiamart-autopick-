@@ -15,8 +15,7 @@ function App() {
       <LeadProvider>
         <HashRouter>
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+            <Route path="/" element={<Layout />}>
               <Route index       element={<Dashboard />} />
               <Route path="leads"    element={<Leads />} />
               <Route path="logs"     element={<ActivityLog />} />
