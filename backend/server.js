@@ -4,6 +4,7 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const apiRoutes  = require('./routes/api');
+const authRoutes = require('./routes/auth');
 const path = require('path');
 
 const app = express();
@@ -15,14 +16,9 @@ app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Auth Routes (Bypass)
-app.get('/api/auth/me', (req, res) => {
-  res.json({ success: true, user: { name: 'Admin' } });
-});
-
-app.post('/api/auth/logout', (req, res) => {
-  res.json({ success: true });
-});
+/* ── Routes ────────────────────────────────────────────────────── */
+app.use('/api',      apiRoutes);
+app.use('/api/auth', authRoutes);
 
 /* ── Health check ─────────────────────────────────────────────── */
 app.get('/', (_req, res) => res.json({ status: 'ok', message: '🚀 IndiaMART Lead System API' }));
