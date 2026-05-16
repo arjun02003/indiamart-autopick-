@@ -3,7 +3,7 @@ const login = async (req, res) => {
     const { password } = req.body;
     
     // Hardcoded simple check for Premium Service
-    if (password === 'admin123') {
+    if (password === 'Arjun123@') {
       res.json({ success: true, message: 'Authenticated successfully' });
     } else {
       res.status(401).json({ success: false, message: 'Invalid credentials' });
