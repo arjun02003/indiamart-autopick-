@@ -113,6 +113,9 @@ async function runCycle() {
   }
 
   log('INFO', `📥 Fetched ${leads.length} leads from IndiaMART`);
+  if (leads.length > 0) {
+    log('INFO', `🆕 Most recent lead found: ${leads[0].customer_name}`);
+  }
   
   // ── SORT BY TIMESTAMP (Newest first)
   leads.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));

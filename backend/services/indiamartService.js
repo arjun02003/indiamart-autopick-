@@ -135,8 +135,9 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
         start : 0, 
         limit : 100, 
         modid : 'ALL', 
-        folder: 'ALL' 
-      }, // Fetch the most recent 100 leads from all folders
+        folder: 'ALL',
+        flag  : 'RECENT' 
+      }, // Match official IndiaMART "Recent" filter
       {
         headers: {
           ...DEFAULT_HEADERS,
