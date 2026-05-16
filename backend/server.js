@@ -2,13 +2,14 @@ const express = require('express');
 const cors    = require('cors');
 const apiRoutes  = require('./routes/api');
 const authRoutes = require('./routes/auth');
+const path = require('path');
 
 const app = express();
 
 // SSE client registry
 const sseClients = new Set();
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -54,6 +55,14 @@ app.use((err, _req, res, _next) => {
   console.error('[Server Error]', err.message);
   res.status(500).json({ error: err.message });
 });
+
+// Serve Frontend in Production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../frontend', 'dist', 'index.html'));
+  });
+}
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`✅ Backend running on http://localhost:${PORT}`));

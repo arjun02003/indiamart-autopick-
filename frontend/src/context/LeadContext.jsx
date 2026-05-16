@@ -29,7 +29,10 @@ export function LeadProvider({ children }) {
   /* ── SSE connection ─────────────────────────────────────────── */
   const connectSSE = useCallback(() => {
     if (sseRef.current) sseRef.current.close();
-    const es = new EventSource('http://localhost:3001/api/events');
+    const sseUrl = process.env.NODE_ENV === 'production'
+      ? '/api/events'
+      : `http://${window.location.hostname}:3001/api/events`;
+    const es = new EventSource(sseUrl);
 
     es.addEventListener('stats',           e => setStats(JSON.parse(e.data)));
     es.addEventListener('session_expired', () => { setSessionExpired(true); setIsRunning(false); });

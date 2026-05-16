@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const BASE = 'http://localhost:3001/api';
+const BASE = process.env.NODE_ENV === 'production' 
+  ? '/api' 
+  : `http://${window.location.hostname}:3001/api`;
 
 const api = axios.create({ baseURL: BASE, timeout: 15000 });
 
