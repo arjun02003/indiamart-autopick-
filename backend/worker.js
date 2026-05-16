@@ -178,9 +178,11 @@ async function runCycle() {
       // Check limit again after incrementing
       const check = db.prepare('SELECT current_accepted_count, accept_limit FROM config WHERE id = 1').get();
       if (check.current_accepted_count >= check.accept_limit) {
-        log('INFO', `🚫 Accept limit reached (${check.current_accepted_count}/${check.accept_limit}). Cycle will stop.`);
+        log('INFO', `🚫 Accept limit reached (${check.current_accepted_count}/${check.accept_limit}). Stopping immediately.`);
         db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
         if (broadcastFn) broadcastFn('status_update', { isRunning: false });
+        stopWorker();
+        break; // Stop processing the rest of the batch IMMEDIATELY
       }
 
       // ── Auto reply

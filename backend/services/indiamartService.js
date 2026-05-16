@@ -55,7 +55,7 @@ function isSessionExpired(data) {
 function parseQuantity(lead) {
   const directFields = [
     'last_product_qty', 'QUERY_PRODUCT_QUANTITY', 'QUANTITY', 'quantity', 
-    'ORDER_QTY', 'qty', 'I_QTY', 'PRODUCT_QTY',
+    'ORDER_QTY', 'qty', 'I_QTY', 'PRODUCT_QTY', 'QUERY_PRODUCT_QTY', 'PRD_QTY'
   ];
   for (const f of directFields) {
     if (lead[f] !== undefined && lead[f] !== null && lead[f] !== '') {
