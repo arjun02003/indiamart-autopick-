@@ -237,12 +237,13 @@ async function runCycle() {
 
   log('INFO', `✔️ Cycle done — Accepted: ${accepted}, Skipped: ${skipped}`);
   if (broadcastFn) broadcastFn('cycle_done', { accepted, skipped, total: leads.length });
-  isProcessing = false;
-} catch (err) {
-  log('ERROR', `Critical worker error: ${err.message}`);
-  isProcessing = false;
-}
-}
+    isProcessing = false;
+  } catch (err) {
+    log('ERROR', `Critical worker error: ${err.message}`);
+    isProcessing = false;
+  }
+
+  // Update DB stats cache
   const stats = db.prepare(`
     SELECT
       COUNT(*) as total,
