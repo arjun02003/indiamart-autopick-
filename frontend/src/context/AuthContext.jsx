@@ -5,37 +5,45 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Password removed by user request
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = async (password) => {
+  const checkAuth = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      });
+      const response = await fetch('/api/auth/me');
       const data = await response.json();
-      
       if (data.success) {
         setIsAuthenticated(true);
-        localStorage.setItem('indiamart_auth', 'true');
-        return true;
+        setUser(data.user);
+      } else {
+        setIsAuthenticated(false);
       }
-      return false;
-    } catch (error) {
-      console.error('Login error:', error);
-      return false;
+    } catch (e) {
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const logout = () => {
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const loginWithGoogle = () => {
+    window.location.href = (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001') + '/api/auth/google';
+  };
+
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
     setIsAuthenticated(false);
-    localStorage.removeItem('indiamart_auth');
+    setUser(null);
+    window.location.href = '/login';
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
-      {children}
+    <AuthContext.Provider value={{ isAuthenticated, user, loading, loginWithGoogle, logout }}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 };

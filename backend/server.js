@@ -1,5 +1,8 @@
 const express = require('express');
 const cors    = require('cors');
+const session = require('express-session');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const apiRoutes  = require('./routes/api');
 const authRoutes = require('./routes/auth');
 const path = require('path');
@@ -12,6 +15,54 @@ const sseClients = new Set();
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Session & Passport
+app.use(session({
+  secret: 'indiamart-secret',
+  resave: false,
+  saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((user, done) => done(null, user));
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID || 'dummy',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy',
+    callbackURL: "/api/auth/google/callback"
+  },
+  (accessToken, refreshToken, profile, done) => {
+    const email = profile.emails[0].value;
+    // Allow any email for now, but you can restrict it here
+    return done(null, { id: profile.id, email });
+  }
+));
+
+// Google Auth Routes
+app.get('/api/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+app.get('/api/auth/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  (req, res) => {
+    res.redirect('/');
+  }
+);
+
+app.get('/api/auth/me', (req, res) => {
+  if (req.isAuthenticated()) {
+    res.json({ success: true, user: req.user });
+  } else {
+    res.status(401).json({ success: false });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.logout(() => {
+    res.json({ success: true });
+  });
+});
 
 /* ── Health check ─────────────────────────────────────────────── */
 app.get('/', (_req, res) => res.json({ status: 'ok', message: '🚀 IndiaMART Lead System API' }));

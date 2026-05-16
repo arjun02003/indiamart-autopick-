@@ -18,6 +18,9 @@
     "better-sqlite3": "^12.10.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
     "tough-cookie": "^6.0.1"
   }
 }

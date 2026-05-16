@@ -1,73 +1,46 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, ArrowRight } from 'lucide-react';
 
 export default function Login() {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    
-    // Simulate slight network delay for premium feel
-    setTimeout(async () => {
-      const success = await login(password);
-      if (success) {
-        navigate('/');
-      } else {
-        setError('Invalid credentials. Please try again.');
-        setIsLoading(false);
-      }
-    }, 800);
-  };
+  const { loginWithGoogle } = useAuth();
 
   return (
-    <div className="login-container">
-      <div className="login-box glass-panel">
-        <div className="login-header">
-          <div className="logo-icon">🚀</div>
-          <h2>Premium Access</h2>
-          <p>IndiaMART Lead Automation Service</p>
-        </div>
+    <div className="login-container" style={{
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      height: '100vh',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+      color: 'white',
+      textAlign: 'center'
+    }}>
+      <div className="glass-panel" style={{ padding: '3rem', borderRadius: '1.5rem', maxWidth: '400px' }}>
+        <img src="/logo512.png" alt="Logo" style={{ width: '80px', marginBottom: '1.5rem' }} />
+        <h1 style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>Welcome Back</h1>
+        <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>Sign in with your Google account to access the Lead Dashboard</p>
         
-        {error && <div className="error-message">{error}</div>}
-
-        <form onSubmit={handleLogin} className="login-form">
-          <div className="input-group">
-            <Lock className="input-icon" size={18} />
-            <input 
-              type="password" 
-              placeholder="Access Key / Password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          
-          <button type="submit" className="btn btn-primary login-btn" disabled={isLoading}>
-            {isLoading ? 'Authenticating...' : (
-              <>
-                Login to Dashboard <ArrowRight size={18} />
-              </>
-            )}
-          </button>
-        </form>
+        <button 
+          onClick={loginWithGoogle}
+          className="btn btn-primary"
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '1rem', 
+            padding: '0.75rem 1.5rem',
+            width: '100%',
+            justifyContent: 'center',
+            fontSize: '1rem'
+          }}
+        >
+          <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="G" style={{ width: '24px' }} />
+          Continue with Google
+        </button>
         
-        <div className="login-footer">
-          <p>Private & Secure System</p>
-        </div>
+        <p style={{ marginTop: '1.5rem', fontSize: '0.8rem', color: '#64748b' }}>
+          Private & Secure Lead Management System
+        </p>
       </div>
-      
-      {/* Dynamic Background Elements */}
-      <div className="bg-shape shape-1"></div>
-      <div className="bg-shape shape-2"></div>
-      <div className="bg-shape shape-3"></div>
     </div>
   );
 }
