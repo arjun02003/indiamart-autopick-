@@ -144,7 +144,7 @@ export default function Leads() {
                           <button className="btn btn-sm btn-danger" onClick={() => handleSkip(lead.id)}>Skip</button>
                         )}
                         <a 
-                          href={`https://seller.indiamart.com/leadmanager/contactlist?id=${lead.lead_id}`} 
+                          href={`https://seller.indiamart.com/#/leadmanager/contactlist?id=${lead.lead_id}`} 
                           target="_blank" 
                           rel="noreferrer"
                           className="btn btn-sm btn-outline"
