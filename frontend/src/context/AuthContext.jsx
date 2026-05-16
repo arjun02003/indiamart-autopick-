@@ -5,10 +5,7 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    // Check local storage for existing session
-    return localStorage.getItem('indiamart_auth') === 'true';
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // Password removed by user request
 
   const login = async (password) => {
     try {
