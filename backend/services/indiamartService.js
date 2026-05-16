@@ -130,7 +130,7 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
   return withRetry(async () => {
     const response = await axios.post(
       CONTACT_LIST_URL,
-      { modid: 'FRESH', mod_id: 'FRESH' }, // Target the "Fresh" leads folder
+      {}, // Fetch all contacts without filtering for just "Fresh"
       {
         headers: {
           ...DEFAULT_HEADERS,

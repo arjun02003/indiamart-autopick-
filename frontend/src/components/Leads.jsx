@@ -99,7 +99,8 @@ export default function Leads() {
           <table>
             <thead>
               <tr>
-                <th>#</th>
+                <th>Time</th>
+                <th>Lead ID</th>
                 <th>Customer</th>
                 <th>Product</th>
                 <th>Qty</th>
@@ -116,7 +117,10 @@ export default function Leads() {
               ) : leads.map(lead => (
                 <>
                   <tr key={lead.id} className="lead-row" onClick={() => setExpanded(expanded === lead.id ? null : lead.id)}>
-                    <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{lead.id}</td>
+                    <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {new Date(lead.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>{lead.lead_id}</td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{lead.customer_name}</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{lead.company_name}</div>
