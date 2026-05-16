@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const loginWithGoogle = () => {
-    window.location.href = (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001') + '/api/auth/google';
+    window.location.href = '/api/auth/google';
   };
 
   const logout = async () => {

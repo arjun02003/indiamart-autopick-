@@ -4,7 +4,6 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const apiRoutes  = require('./routes/api');
-const authRoutes = require('./routes/auth');
 const path = require('path');
 
 const app = express();
@@ -31,7 +30,8 @@ passport.deserializeUser((user, done) => done(null, user));
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID || 'dummy',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy',
-    callbackURL: "/api/auth/google/callback"
+    callbackURL: "/api/auth/google/callback",
+    proxy: true
   },
   (accessToken, refreshToken, profile, done) => {
     const email = profile.emails[0].value;
@@ -99,7 +99,6 @@ app.locals.broadcast = broadcast;
 
 /* ── Routes ────────────────────────────────────────────────────── */
 app.use('/api',      apiRoutes);
-app.use('/api/auth', authRoutes);
 
 /* ── Global error handler ──────────────────────────────────────── */
 app.use((err, _req, res, _next) => {
