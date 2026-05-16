@@ -6,6 +6,8 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const apiRoutes  = require('./routes/api');
 const authRoutes = require('./routes/auth');
 const path = require('path');
+const db = require('./db');
+const worker = require('./worker');
 
 const app = express();
 
