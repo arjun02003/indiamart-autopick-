@@ -5,20 +5,49 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
-  const [user, setUser] = useState({ name: 'Admin' });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return !!localStorage.getItem('indiamart_token');
+  });
+  const [user, setUser] = useState(() => {
+    const u = localStorage.getItem('indiamart_user');
+    return u ? JSON.parse(u) : null;
+  });
   const [loading, setLoading] = useState(false);
 
-  const loginWithGoogle = () => {
-    // No action needed
+  const signup = async (email, password) => {
+    const response = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    return await response.json();
+  };
+
+  const login = async (email, password) => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+    if (data.success) {
+      localStorage.setItem('indiamart_token', data.token);
+      localStorage.setItem('indiamart_user', JSON.stringify(data.user));
+      setIsAuthenticated(true);
+      setUser(data.user);
+    }
+    return data;
   };
 
   const logout = () => {
-    // No action needed
+    localStorage.removeItem('indiamart_token');
+    localStorage.removeItem('indiamart_user');
+    setIsAuthenticated(false);
+    setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, loading, signup, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
