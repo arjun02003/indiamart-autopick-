@@ -5,7 +5,7 @@ import Notifications from './Notifications';
 
 export default function Layout() {
   const { isRunning, stats, toggleAutoMode } = useLeadSystem();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <div className="app-container">
@@ -37,7 +37,26 @@ export default function Layout() {
           <NavLink to="/settings"    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>⚙️ Settings</NavLink>
         </nav>
 
-        <button className="nav-link logout-btn" onClick={logout}>🚪 Logout</button>
+        <div style={{ marginTop: 'auto', padding: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+            <img 
+              src={user?.photoURL || 'https://ui-avatars.com/api/?name=' + (user?.displayName || 'User')} 
+              alt="Profile" 
+              style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2px solid var(--accent)' }} 
+            />
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user?.displayName || 'User'}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user?.email}
+              </div>
+            </div>
+          </div>
+          <button className="btn btn-sm btn-outline" style={{ width: '100%', borderColor: 'rgba(239, 68, 68, 0.3)', color: '#ef4444' }} onClick={logout}>
+            🚪 Logout
+          </button>
+        </div>
       </aside>
 
       <main className="main-content">
