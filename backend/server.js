@@ -59,7 +59,9 @@ app.use((err, _req, res, _next) => {
 // Serve Frontend in Production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  app.get('/*', (req, res) => {
+  
+  // Catch-all route to serve index.html for any unknown request
+  app.use((req, res) => {
     res.sendFile(path.resolve(__dirname, '../frontend', 'dist', 'index.html'));
   });
 }
