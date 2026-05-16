@@ -81,15 +81,6 @@ export default function Auth() {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {!isLogin && (
-            <input 
-              type="text" 
-              placeholder="Full Name" 
-              value={name} 
-              onChange={e => setName(e.target.value)} 
-              required 
-            />
-          )}
           <input 
             type="email" 
             placeholder="Email Address" 
@@ -110,7 +101,7 @@ export default function Auth() {
             style={{ width: '100%', padding: '0.8rem' }}
             disabled={loading}
           >
-            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Create Account')}
+            {loading ? 'Logging in...' : 'Sign In'}
           </button>
         </form>
 
@@ -128,14 +119,8 @@ export default function Auth() {
           Continue with Google
         </button>
 
-        <p style={{ marginTop: '2rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-          {isLogin ? "Don't have an account?" : "Already have an account?"} {' '}
-          <span 
-            onClick={() => setIsLogin(!isLogin)} 
-            style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}
-          >
-            {isLogin ? 'Sign Up' : 'Log In'}
-          </span>
+        <p style={{ marginTop: '2rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+          Secure Portal Access
         </p>
       </div>
     </div>
