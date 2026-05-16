@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard   from './components/Dashboard';
 import Leads       from './components/Leads';
 import Settings    from './components/Settings';
@@ -13,7 +13,7 @@ function App() {
   return (
     <AuthProvider>
       <LeadProvider>
-        <BrowserRouter>
+        <HashRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
@@ -24,7 +24,7 @@ function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </BrowserRouter>
+        </HashRouter>
       </LeadProvider>
     </AuthProvider>
   );
