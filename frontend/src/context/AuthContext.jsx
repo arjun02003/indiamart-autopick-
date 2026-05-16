@@ -15,13 +15,6 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
   };
 
-  const logout = () => {
-    localStorage.removeItem('indiamart_token');
-    localStorage.removeItem('indiamart_user');
-    setIsAuthenticated(false);
-    setUser(null);
-  };
-
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, loading, signup, login, logout }}>
       {children}
