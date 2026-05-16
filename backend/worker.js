@@ -5,6 +5,7 @@ const { sendTelegramNotification } = require('./services/telegramService');
 let workerTimer    = null;
 let broadcastFn    = null;   // injected from server after boot
 let sessionExpired = false;
+let isProcessing   = false;  // Lock to prevent concurrent cycles
 
 /* ── Logging ───────────────────────────────────────────────────── */
 function log(type, message) {
@@ -53,8 +54,24 @@ function buildReplyMessage(template, lead) {
 
 /* ── Main fetch + process cycle ────────────────────────────────── */
 async function runCycle() {
-  const config = db.prepare('SELECT * FROM config WHERE id = 1').get();
-  if (!config || config.is_running === 0) return;
+  if (isProcessing) return;
+  isProcessing = true;
+
+  try {
+    const config = db.prepare('SELECT * FROM config WHERE id = 1').get();
+    if (!config || config.is_running === 0) {
+      isProcessing = false;
+      return;
+    }
+
+    if (config.current_accepted_count >= config.accept_limit) {
+      log('INFO', `🚫 Limit hit (${config.current_accepted_count}/${config.accept_limit}). Stopping.`);
+      db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
+      if (broadcastFn) broadcastFn('status_update', { isRunning: false });
+      stopWorker();
+      isProcessing = false;
+      return;
+    }
 
   const keywords   = JSON.parse(config.keywords  || '[]').map(k => k.toLowerCase());
   const countries  = JSON.parse(config.countries || '[]').map(c => c.toLowerCase());
@@ -182,7 +199,7 @@ async function runCycle() {
         db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
         if (broadcastFn) broadcastFn('status_update', { isRunning: false });
         stopWorker();
-        break; // Stop processing the rest of the batch IMMEDIATELY
+        break; 
       }
 
       // ── Auto reply
@@ -216,8 +233,12 @@ async function runCycle() {
 
   log('INFO', `✔️ Cycle done — Accepted: ${accepted}, Skipped: ${skipped}`);
   if (broadcastFn) broadcastFn('cycle_done', { accepted, skipped, total: leads.length });
-
-  // Update DB stats cache
+  isProcessing = false;
+} catch (err) {
+  log('ERROR', `Critical worker error: ${err.message}`);
+  isProcessing = false;
+}
+}
   const stats = db.prepare(`
     SELECT
       COUNT(*) as total,
