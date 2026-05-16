@@ -129,7 +129,12 @@ export default function Leads() {
                       {lead.email  && <div>✉️ {lead.email}</div>}
                     </td>
                     <td><span className={`badge ${STATUS_COLORS[lead.status] || 'badge-muted'}`}>{lead.status}</span></td>
-                    <td><span className={`badge ${lead.replied ? 'badge-success' : 'badge-muted'}`}>{lead.replied ? 'Yes' : 'No'}</span></td>
+                    <td>
+                      {lead.replied 
+                        ? <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', width: 'fit-content' }}>✅ Yes</span> 
+                        : <span className="badge badge-muted" style={{ color: '#64748b' }}>No</span>
+                      }
+                    </td>
                     <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                       {lead.status !== 'Accepted' && (
                         <button className="btn btn-sm btn-success" onClick={() => handleAccept(lead.id)}>Accept</button>
