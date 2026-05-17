@@ -1,34 +1,46 @@
-import axios from 'axios';
+require("dotenv").config();
 
-const BASE = process.env.NODE_ENV === 'production' 
-  ? 'https://indiamart-autopick-1-5ayn.onrender.com/api' 
-  : `http://${window.location.hostname}:3001/api`;
+const express = require("express");
+const axios = require("axios");
+const cors = require("cors");
 
-const api = axios.create({ baseURL: BASE, timeout: 15000 });
+const app = express();
+const PORT = process.env.PORT || 5000;
 
-export const getConfig      = ()       => api.get('/config').then(r => r.data.config);
-export const saveConfig     = (data)   => api.post('/config', data).then(r => r.data);
-export const uploadCookies  = (cookies)=> api.post('/upload-cookies', { cookies }).then(r => r.data);
+app.use(cors());
+app.use(express.json());
 
-export const startAutoMode  = ()       => api.post('/start').then(r => r.data);
-export const stopAutoMode   = ()       => api.post('/stop').then(r => r.data);
-export const getStatus      = ()       => api.get('/status').then(r => r.data);
+// Home Route
+app.get("/", (req, res) => {
+  res.send("IndiaMART API Server Running...");
+});
 
-export const getLeads       = (params) => api.get('/leads', { params }).then(r => r.data);
-export const getStats       = ()       => api.get('/stats').then(r => r.data.stats);
-export const resetCounter   = ()       => api.post('/reset-counter').then(r => r.data);
-export const acceptLead     = (id)     => api.post(`/leads/${id}/accept`).then(r => r.data);
-export const skipLead       = (id)     => api.post(`/leads/${id}/skip`).then(r => r.data);
-export const clearLeads     = ()       => api.delete('/leads').then(r => r.data);
+// Get Leads
+app.get("/leads", async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://mapi.indiamart.com/wservce/buyerLead/",
+      {
+        params: {
+          glusr_crm_key: process.env.INDIAMART_API_KEY,
+        },
+      }
+    );
 
-export const getLogs        = (limit)  => api.get('/logs', { params: { limit } }).then(r => r.data.logs);
-export const clearLogs      = ()       => api.delete('/logs').then(r => r.data);
+    res.json({
+      success: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.log("Lead Fetch Error:", error.message);
 
-export const exportLeads    = (format, status) => {
-  const params = new URLSearchParams({ format, ...(status ? { status } : {}) });
-  window.open(`${BASE}/export?${params}`, '_blank');
-};
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
 
-export const testTelegram   = (token, chat_id) => api.post('/telegram/test', { token, chat_id }).then(r => r.data);
-
-export default api;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
