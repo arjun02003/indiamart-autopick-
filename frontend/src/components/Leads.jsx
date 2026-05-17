@@ -1,172 +1,155 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { getLeads, acceptLead, skipLead, exportLeads } from '../services/api';
 import { useLeadSystem } from '../context/LeadContext';
 
-const STATUS_COLORS = {
-  Accepted: 'badge-success',
-  Skipped : 'badge-danger',
-  Pending : 'badge-warning',
-};
-
 export default function Leads() {
-  const { addNotification, refreshStats } = useLeadSystem();
-  const [leads,   setLeads]   = useState([]);
-  const [total,   setTotal]   = useState(0);
-  const [page,    setPage]    = useState(1);
-  const [search,  setSearch]  = useState('');
-  const [filter,  setFilter]  = useState('');
-  const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(null);
-  const LIMIT = 25;
+  const { refreshStats, addNotification } = useLeadSystem();
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+  const limit = 25;
 
-  const fetchLeads = useCallback(async () => {
+  const loadLeads = async () => {
     setLoading(true);
     try {
-      const data = await getLeads({ page, limit: LIMIT, search, status: filter });
-      setLeads(data.leads);
-      setTotal(data.total);
-    } catch (e) {
-      addNotification('error', 'Failed to load leads');
+      const data = await getLeads({ page, limit, search, status });
+      setLeads(data.leads || []);
+      setTotal(data.total || 0);
+    } catch (error) {
+      addNotification('error', `Failed to load leads: ${error.message}`);
     } finally {
       setLoading(false);
     }
-  }, [page, search, filter, addNotification]);
+  };
 
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
-
-  // Reset page when search/filter changes
-  useEffect(() => { setPage(1); }, [search, filter]);
+  useEffect(() => {
+    loadLeads();
+  }, [page, search, status]);
 
   const handleAccept = async (id) => {
     try {
       await acceptLead(id);
-      addNotification('success', 'Lead accepted & reply sent!');
-      fetchLeads(); refreshStats();
-    } catch (e) { addNotification('error', e.message); }
+      addNotification('success', 'Lead accepted successfully.');
+      refreshStats();
+      loadLeads();
+    } catch (error) {
+      addNotification('error', `Accept failed: ${error.message}`);
+    }
   };
 
   const handleSkip = async (id) => {
     try {
       await skipLead(id);
-      addNotification('info', 'Lead skipped.');
-      fetchLeads(); refreshStats();
-    } catch (e) { addNotification('error', e.message); }
+      addNotification('success', 'Lead skipped successfully.');
+      refreshStats();
+      loadLeads();
+    } catch (error) {
+      addNotification('error', `Skip failed: ${error.message}`);
+    }
   };
 
-  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  const pages = Math.max(1, Math.ceil(total / limit));
 
   return (
     <div className="leads-page">
-      {/* Header */}
       <div className="page-header">
         <div>
-          <h2 className="page-title">Lead Management</h2>
-          <p className="page-subtitle">{total} total leads found</p>
+          <h2 className="page-title">Leads</h2>
+          <p className="page-subtitle">Review, accept, or skip leads collected by the system.</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn btn-outline" onClick={() => exportLeads('csv', filter)}>⬇️ Export CSV</button>
-          <button className="btn btn-outline" onClick={() => exportLeads('json', filter)}>⬇️ Export JSON</button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="btn btn-success" onClick={() => exportLeads('csv', status)}>
+            Export CSV
+          </button>
+          <button className="btn btn-outline" onClick={() => exportLeads('json', status)}>
+            Export JSON
+          </button>
         </div>
       </div>
 
-      {/* Search + Filter bar */}
-      <div className="glass-panel" style={{ padding: '1rem 1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="glass-panel" style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.75rem' }}>
         <input
-          id="lead-search"
-          type="text"
-          placeholder="🔍 Search by name, product, country, mobile…"
+          className="form-control"
+          type="search"
           value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: '200px' }}
+          placeholder="Search leads by name, company, product, country, or mobile"
+          onChange={(e) => { setPage(1); setSearch(e.target.value); }}
         />
-        <select id="lead-filter" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
-          <option value="">All Status</option>
+        <select
+          className="form-control"
+          value={status}
+          onChange={(e) => { setPage(1); setStatus(e.target.value); }}
+        >
+          <option value="">All statuses</option>
           <option value="Accepted">Accepted</option>
           <option value="Skipped">Skipped</option>
           <option value="Pending">Pending</option>
         </select>
-        <button className="btn btn-outline" onClick={fetchLeads}>🔄 Refresh</button>
+        <div style={{ textAlign: 'right', color: 'var(--text-muted)', alignSelf: 'center' }}>
+          Total leads: {total}
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="glass-panel table-container" style={{ marginTop: '0' }}>
+      <div className="glass-panel table-container">
         {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <div className="spinner"></div>
-            <p style={{ marginTop: '1rem' }}>Loading leads…</p>
-          </div>
+          <div className="spinner" />
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Lead ID</th>
+                <th>ID</th>
                 <th>Customer</th>
                 <th>Product</th>
-                <th>Qty</th>
                 <th>Country</th>
-                <th>Contact</th>
                 <th>Status</th>
-                <th>Replied</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {leads.length === 0 ? (
-                <tr><td colSpan="9" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>No leads found.</td></tr>
-              ) : leads.map(lead => (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '2rem 0' }}>
+                    No leads found.
+                  </td>
+                </tr>
+              ) : leads.map((lead) => (
                 <>
-                  <tr key={lead.id} className="lead-row" onClick={() => setExpanded(expanded === lead.id ? null : lead.id)}>
-                    <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {new Date(lead.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>{lead.lead_id}</td>
+                  <tr
+                    key={lead.id}
+                    className="lead-row"
+                    onClick={() => setExpandedId(expandedId === lead.id ? null : lead.id)}
+                  >
+                    <td>{lead.id}</td>
+                    <td>{lead.customer_name || lead.company_name || '—'}</td>
+                    <td>{lead.product || '—'}</td>
+                    <td>{lead.country || '—'}</td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{lead.customer_name}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{lead.company_name}</div>
+                      <span className={`badge ${lead.status === 'Accepted' ? 'badge-success' : lead.status === 'Skipped' ? 'badge-danger' : 'badge-muted'}`}>
+                        {lead.status || 'Pending'}
+                      </span>
                     </td>
-                    <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.product}</td>
-                    <td><span className="badge badge-info">{lead.quantity > 0 ? lead.quantity : '—'}</span></td>
-                    <td>{lead.country}</td>
-                    <td style={{ fontSize: '0.85rem' }}>
-                      {lead.mobile && <div>📞 {lead.mobile}</div>}
-                      {lead.email  && <div>✉️ {lead.email}</div>}
-                    </td>
-                    <td><span className={`badge ${STATUS_COLORS[lead.status] || 'badge-muted'}`}>{lead.status}</span></td>
-                    <td>
-                      {lead.replied 
-                        ? <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', width: 'fit-content' }}>✅ Yes</span> 
-                        : <span className="badge badge-muted" style={{ color: '#64748b' }}>No</span>
-                      }
-                    </td>
-                    <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {lead.status !== 'Accepted' && (
-                          <button className="btn btn-sm btn-success" onClick={() => handleAccept(lead.id)}>Accept</button>
-                        )}
-                        {lead.status !== 'Skipped' && (
-                          <button className="btn btn-sm btn-danger" onClick={() => handleSkip(lead.id)}>Skip</button>
-                        )}
-                        <a 
-                          href={`https://seller.indiamart.com/#/leadmanager/contactlist?id=${lead.lead_id}`} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="btn btn-sm btn-outline"
-                          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                        >
-                          👁️ View Chat
-                        </a>
-                      </div>
+                    <td style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); handleAccept(lead.id); }}>
+                        Accept
+                      </button>
+                      <button className="btn btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); handleSkip(lead.id); }}>
+                        Skip
+                      </button>
                     </td>
                   </tr>
-                  {expanded === lead.id && (
-                    <tr key={`${lead.id}-detail`} className="lead-detail-row">
-                      <td colSpan="9">
+                  {expandedId === lead.id && (
+                    <tr className="lead-detail-row">
+                      <td colSpan="6">
                         <div className="lead-detail">
-                          <div><strong>Lead ID:</strong> {lead.lead_id}</div>
-                          <div><strong>Reason:</strong> {lead.reason || '—'}</div>
-                          <div><strong>Message:</strong> {lead.message || '—'}</div>
-                          <div><strong>Timestamp:</strong> {new Date(lead.timestamp).toLocaleString()}</div>
+                          <div><strong>Company</strong><br />{lead.company_name || '—'}</div>
+                          <div><strong>Mobile</strong><br />{lead.mobile || '—'}</div>
+                          <div><strong>Email</strong><br />{lead.email || '—'}</div>
+                          <div><strong>Quantity</strong><br />{lead.quantity || '—'}</div>
+                          <div style={{ gridColumn: '1 / -1' }}><strong>Message</strong><br />{lead.message || '—'}</div>
                         </div>
                       </td>
                     </tr>
@@ -178,14 +161,15 @@ export default function Leads() {
         )}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-          <span style={{ color: 'var(--text-muted)' }}>Page {page} of {totalPages}</span>
-          <button className="btn btn-outline" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-        </div>
-      )}
+      <div className="pagination">
+        <button className="btn btn-outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+          Previous
+        </button>
+        <span>Page {page} of {pages}</span>
+        <button className="btn btn-outline" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}>
+          Next
+        </button>
+      </div>
     </div>
   );
 }

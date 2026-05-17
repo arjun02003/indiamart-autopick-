@@ -1,34 +1,151 @@
-import axios from 'axios';
+import axios from "axios";
 
-const BASE = process.env.NODE_ENV === 'production' 
-  ? 'https://indiamart-autopick-1-5ayn.onrender.com/api' 
-  : `http://${window.location.hostname}:3001/api`;
+// ==========================
+// BASE URL
+// ==========================
 
-const api = axios.create({ baseURL: BASE, timeout: 15000 });
+const BASE =
+  process.env.NODE_ENV === "production"
+    ? "https://indiamart-autopick-1-5ayn.onrender.com/api"
+    : "http://localhost:3001/api";
 
-export const getConfig      = ()       => api.get('/config').then(r => r.data.config);
-export const saveConfig     = (data)   => api.post('/config', data).then(r => r.data);
-export const uploadCookies  = (cookies)=> api.post('/upload-cookies', { cookies }).then(r => r.data);
+// ==========================
+// AXIOS
+// ==========================
 
-export const startAutoMode  = ()       => api.post('/start').then(r => r.data);
-export const stopAutoMode   = ()       => api.post('/stop').then(r => r.data);
-export const getStatus      = ()       => api.get('/status').then(r => r.data);
+const api = axios.create({
+  baseURL: BASE,
+  timeout: 15000,
+});
 
-export const getLeads       = (params) => api.get('/leads', { params }).then(r => r.data);
-export const getStats       = ()       => api.get('/stats').then(r => r.data.stats);
-export const resetCounter   = ()       => api.post('/reset-counter').then(r => r.data);
-export const acceptLead     = (id)     => api.post(`/leads/${id}/accept`).then(r => r.data);
-export const skipLead       = (id)     => api.post(`/leads/${id}/skip`).then(r => r.data);
-export const clearLeads     = ()       => api.delete('/leads').then(r => r.data);
+// ==========================
+// CONFIG
+// ==========================
 
-export const getLogs        = (limit)  => api.get('/logs', { params: { limit } }).then(r => r.data.logs);
-export const clearLogs      = ()       => api.delete('/logs').then(r => r.data);
-
-export const exportLeads    = (format, status) => {
-  const params = new URLSearchParams({ format, ...(status ? { status } : {}) });
-  window.open(`${BASE}/export?${params}`, '_blank');
+export const getConfig = async () => {
+  const res = await api.get("/config");
+  return res.data.config;
 };
 
-export const testTelegram   = (token, chat_id) => api.post('/telegram/test', { token, chat_id }).then(r => r.data);
+export const saveConfig = async (data) => {
+  const res = await api.post("/config", data);
+  return res.data;
+};
+
+export const uploadCookies = async (cookies) => {
+  const res = await api.post("/upload-cookies", {
+    cookies,
+  });
+
+  return res.data;
+};
+
+// ==========================
+// AUTO MODE
+// ==========================
+
+export const startAutoMode = async () => {
+  const res = await api.post("/start");
+  return res.data;
+};
+
+export const stopAutoMode = async () => {
+  const res = await api.post("/stop");
+  return res.data;
+};
+
+export const getStatus = async () => {
+  const res = await api.get("/status");
+  return res.data;
+};
+
+// ==========================
+// LEADS
+// ==========================
+
+export const getLeads = async (params = {}) => {
+  const res = await api.get("/leads", {
+    params,
+  });
+
+  return res.data;
+};
+
+export const getStats = async () => {
+  const res = await api.get("/stats");
+  return res.data.stats;
+};
+
+export const resetCounter = async () => {
+  const res = await api.post("/reset-counter");
+  return res.data;
+};
+
+export const acceptLead = async (id) => {
+  const res = await api.post(`/leads/${id}/accept`);
+  return res.data;
+};
+
+export const skipLead = async (id) => {
+  const res = await api.post(`/leads/${id}/skip`);
+  return res.data;
+};
+
+export const clearLeads = async () => {
+  const res = await api.delete("/leads");
+  return res.data;
+};
+
+// ==========================
+// LOGS
+// ==========================
+
+export const getLogs = async (limit = 100) => {
+  const res = await api.get("/logs", {
+    params: { limit },
+  });
+
+  return res.data.logs;
+};
+
+export const clearLogs = async () => {
+  const res = await api.delete("/logs");
+  return res.data;
+};
+
+// ==========================
+// EXPORT
+// ==========================
+
+export const exportLeads = (format = "json", status = "") => {
+  const params = new URLSearchParams({
+    format,
+    ...(status ? { status } : {}),
+  });
+
+  window.open(
+    `${BASE}/export?${params}`,
+    "_blank"
+  );
+};
+
+// ==========================
+// TELEGRAM
+// ==========================
+
+export const testTelegram = async (
+  token,
+  chat_id
+) => {
+  const res = await api.post(
+    "/telegram/test",
+    {
+      token,
+      chat_id,
+    }
+  );
+
+  return res.data;
+};
 
 export default api;

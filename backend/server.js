@@ -1,90 +1,116 @@
 const express = require('express');
-const cors    = require('cors');
-const session = require('express-session');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const apiRoutes  = require('./routes/api');
-const authRoutes = require('./routes/auth');
+const cors = require('cors');
 const path = require('path');
 const db = require('./db');
+const apiRoutes = require('./routes/api');
+const authRoutes = require('./routes/auth');
 const worker = require('./worker');
 
 const app = express();
+const PORT = process.env.PORT || 3001;
 
-// SSE client registry
-const sseClients = new Set();
-
-app.use(cors({ origin: '*', credentials: true }));
-app.use(express.json({ limit: '10mb' }));
+// ===========================
+// MIDDLEWARE
+// ===========================
+app.use(cors());
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* ── Routes ────────────────────────────────────────────────────── */
-app.use('/api',      apiRoutes);
-app.use('/api/auth', authRoutes);
+// ===========================
+// APP LOCALS (for worker broadcast)
+// ===========================
+const clientsSet = new Set();
 
-/* ── Health check ─────────────────────────────────────────────── */
-app.get('/', (_req, res) => res.json({ status: 'ok', message: '🚀 IndiaMART Lead System API' }));
-
-/* ── SSE — Real-time event stream ─────────────────────────────── */
-app.get('/api/events', (req, res) => {
-  res.setHeader('Content-Type',  'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection',    'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.flushHeaders();
-
-  // Send heartbeat immediately
-  res.write('event: ping\ndata: connected\n\n');
-
-  const heartbeat = setInterval(() => {
-    if (!res.writableEnded) res.write('event: ping\ndata: heartbeat\n\n');
-  }, 25000);
-
-  sseClients.add(res);
-  req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
-});
-
-/* ── Broadcast helper (used by worker) ────────────────────────── */
-function broadcast(event, data) {
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const client of sseClients) {
-    if (!client.writableEnded) client.write(payload);
+function broadcast(type, data) {
+  const message = `data: ${JSON.stringify({ type, data })}\n\n`;
+  for (const res of clientsSet) {
+    res.write(message);
   }
 }
 
-// Attach broadcast to app so routes/worker can access it
 app.locals.broadcast = broadcast;
 
-/* ── Routes ────────────────────────────────────────────────────── */
-app.use('/api',      apiRoutes);
+// ===========================
+// ROUTES
+// ===========================
+app.use('/api', apiRoutes);
+app.use('/auth', authRoutes);
 
-/* ── Global error handler ──────────────────────────────────────── */
-app.use((err, _req, res, _next) => {
-  console.error('[Server Error]', err.message);
-  res.status(500).json({ error: err.message });
+// ===========================
+// SSE ENDPOINT (Server-Sent Events)
+// ===========================
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  clientsSet.add(res);
+
+  res.write(':\n\n'); // Keep-alive comment
+
+  req.on('close', () => {
+    clientsSet.delete(res);
+    res.end();
+  });
 });
 
-// Serve Frontend in Production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  
-  // Catch-all route to serve index.html for any unknown request
-  app.use((req, res) => {
-    res.sendFile(path.resolve(__dirname, '../frontend', 'dist', 'index.html'));
-  });
-}
+// ===========================
+// HEALTH CHECK
+// ===========================
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
-const PORT = process.env.PORT || 3001;
+// ===========================
+// ERROR HANDLING
+// ===========================
+app.use((err, _req, res, _next) => {
+  console.error('[ERROR]', err);
+  res.status(500).json({ error: err.message || 'Internal Server Error' });
+});
+
+// ===========================
+// START SERVER
+// ===========================
 app.listen(PORT, () => {
-  console.log(`✅ Backend running on http://localhost:${PORT}`);
-  
-  // Auto-start worker ONLY if it was previously running
-  const config = db.prepare('SELECT is_running FROM config WHERE id = 1').get();
-  if (config && config.is_running === 1) {
-    worker.startWorker(broadcast);
-  } else {
-    console.log('ℹ️ Auto Mode is OFF. Waiting for user to start it manually.');
+  console.log(`
+╔════════════════════════════════════════╗
+║   IndiaMART Auto Lead System Backend   ║
+║          🚀 Server Started             ║
+║      http://localhost:${PORT}          ║
+╚════════════════════════════════════════╝
+  `);
+
+  // Ensure config table has at least one row
+  try {
+    const config = db.prepare('SELECT COUNT(*) as cnt FROM config').get();
+    if (config.cnt === 0) {
+      db.prepare(`
+        INSERT INTO config (
+          id, keywords, countries, interval, is_running, 
+          cookies, auto_reply_msg, telegram_token, telegram_chat_id,
+          proxy_url, min_quantity, reply_enabled, accept_limit, current_accepted_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        1, '[]', '[]', 30, 0,
+        '[]',
+        'Thank you for your inquiry about {product}. We will get back to you shortly.',
+        '', '', '', 0, 1, 100, 0
+      );
+      console.log('✓ Default config created');
+    }
+  } catch (e) {
+    console.error('Config init error:', e.message);
   }
 });
 
-module.exports = app;
+// ===========================
+// GRACEFUL SHUTDOWN
+// ===========================
+process.on('SIGINT', () => {
+  console.log('\n\n╔════════════════════════════════════════╗');
+  console.log('║        🛑 Server Shutting Down        ║');
+  console.log('╚════════════════════════════════════════╝\n');
+  worker.stopWorker();
+  process.exit(0);
+});
