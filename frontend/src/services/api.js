@@ -2,6 +2,10 @@ import axios from "axios";
 
 const API = "http://localhost:5000";
 
+// ==========================
+// LEADS
+// ==========================
+
 // Get Leads
 export const getLeads = async () => {
   const res = await axios.get(`${API}/leads`);
@@ -25,6 +29,16 @@ export const exportLeads = async () => {
   const res = await axios.get(`${API}/export`);
   return res.data;
 };
+
+// Clear Leads
+export const clearLeads = async () => {
+  const res = await axios.delete(`${API}/clear`);
+  return res.data;
+};
+
+// ==========================
+// CONFIG
+// ==========================
 
 // Get Config
 export const getConfig = async () => {
@@ -53,8 +67,30 @@ export const testTelegram = async (data) => {
   return res.data;
 };
 
-// Clear Leads
-export const clearLeads = async () => {
-  const res = await axios.delete(`${API}/clear`);
+// ==========================
+// STATS & STATUS
+// ==========================
+
+// Get Stats
+export const getStats = async () => {
+  const res = await axios.get(`${API}/stats`);
+  return res.data;
+};
+
+// Get Status
+export const getStatus = async () => {
+  const res = await axios.get(`${API}/status`);
+  return res.data;
+};
+
+// Start Auto Mode
+export const startAutoMode = async () => {
+  const res = await axios.post(`${API}/start-auto`);
+  return res.data;
+};
+
+// Stop Auto Mode
+export const stopAutoMode = async () => {
+  const res = await axios.post(`${API}/stop-auto`);
   return res.data;
 };
