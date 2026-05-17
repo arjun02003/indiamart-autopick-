@@ -94,3 +94,19 @@ export const stopAutoMode = async () => {
   const res = await axios.post(`${API}/stop-auto`);
   return res.data;
 };
+
+// ==========================
+// LOGS
+// ==========================
+
+// Get Logs
+export const getLogs = async () => {
+  const res = await axios.get(`${API}/logs`);
+  return res.data;
+};
+
+// Clear Logs
+export const clearLogs = async () => {
+  const res = await axios.delete(`${API}/logs`);
+  return res.data;
+};
