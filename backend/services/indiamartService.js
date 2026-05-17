@@ -44,9 +44,9 @@ function isSessionExpired(data) {
   }
   if (data && typeof data === 'object') {
     const code = String(data.STATUS || data.status || data.CODE || data.code || '');
-    if (['SESSION_EXPIRED', '401', 'INVALID_SESSION', 'GLID_MISSING'].includes(code)) return true;
+    if (['SESSION_EXPIRED', '401', '402', 'INVALID_SESSION', 'GLID_MISSING', 'TOKEN_EXPIRED'].includes(code)) return true;
     const msg = String(data.message || data.MESSAGE || data.msg || '').toLowerCase();
-    if (msg.includes('session') || msg.includes('login') || msg.includes('unauthori')) return true;
+    if (msg.includes('session') || msg.includes('login') || msg.includes('unauthori') || msg.includes('expired') || msg.includes('token')) return true;
   }
   return false;
 }
