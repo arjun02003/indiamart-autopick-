@@ -118,69 +118,96 @@ async function withRetry(fn, retries = 3, delayMs = 2000) {
 }
 
 /* ── fetchLeads ──────────────────────────────────────────────────────
-   The real IndiaMART API accepts:
-     POST https://seller.indiamart.com/lmsreact/getContactList
-     Body: {}   (empty JSON object)
-     Content-Type: application/json
-   Response key is `result` (array of leads)
+   Paginates through ALL pages of IndiaMART leads.
+   IndiaMART caps each response at 50 leads regardless of limit,
+   so we loop with start=0, 50, 100... until an empty page is returned.
 */
 async function fetchLeads(cookiesRaw, proxyUrl = '') {
   const cookieString = parseCookies(cookiesRaw);
   if (!cookieString) throw new Error('No valid cookies provided');
 
-  return withRetry(async () => {
-    const response = await axios.post(
-      CONTACT_LIST_URL,
-      { 
-        start : 0, 
-        limit : 100, 
-        modid : 'ALL', 
-        folder: 'ALL',
-        flag  : 'RECENT' 
-      }, // Match official IndiaMART "Recent" filter
-      {
-        headers: {
-          ...DEFAULT_HEADERS,
-          'Cookie'      : cookieString,
-          'Content-Type': 'application/json',
+  const PAGE_SIZE  = 50;   // IndiaMART hard-caps at 50 per response
+  const MAX_PAGES  = 20;   // safety cap — fetch at most 1000 leads
+  const allLeads   = [];
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const start = page * PAGE_SIZE;
+
+    // eslint-disable-next-line no-await-in-loop
+    const pageLeads = await withRetry(async () => {
+      const response = await axios.post(
+        CONTACT_LIST_URL,
+        {
+          start,
+          limit : PAGE_SIZE,
+          modid : 'ALL',
+          folder: 'ALL',
+          flag  : 'RECENT',
         },
-        proxy   : buildProxy(proxyUrl),
-        timeout : 30000,
+        {
+          headers: {
+            ...DEFAULT_HEADERS,
+            'Cookie'      : cookieString,
+            'Content-Type': 'application/json',
+          },
+          proxy  : buildProxy(proxyUrl),
+          timeout: 30000,
+        }
+      );
+
+      const data = response.data;
+
+      if (isSessionExpired(data)) {
+        const e = new Error('SESSION_EXPIRED'); e.code = 'SESSION_EXPIRED'; throw e;
       }
-    );
 
-    const data = response.data;
+      // Try all known response shapes — most common first
+      const leads =
+        data.result    ||
+        data.RESPONSE  ||
+        data.response  ||
+        data.leads     ||
+        data.data      ||
+        data.Results   ||
+        data.enquiries ||
+        (Array.isArray(data) ? data : null);
 
-    // Log raw response shape for debugging
-    console.log('[IndiaMART] Raw response keys:', typeof data === 'object' ? Object.keys(data).join(', ') : typeof data);
+      if (!leads) {
+        // Only throw on first page; later pages may just return empty
+        if (page === 0) {
+          throw new Error(
+            `Unknown response shape. Top-level keys: ${Object.keys(data).join(', ')} | Sample: ${JSON.stringify(data).slice(0, 300)}`
+          );
+        }
+        return [];
+      }
 
-    if (isSessionExpired(data)) {
-      const e = new Error('SESSION_EXPIRED'); e.code = 'SESSION_EXPIRED'; throw e;
+      if (!Array.isArray(leads)) {
+        if (page === 0) throw new Error(`"leads" field is not an array: ${JSON.stringify(leads).slice(0, 200)}`);
+        return [];
+      }
+
+      return leads;
+    });
+
+    if (pageLeads.length === 0) {
+      console.log(`[IndiaMART] Page ${page + 1}: no more leads — stopping pagination.`);
+      break;
     }
 
-    // Try all known response shapes — most common first
-    const leads =
-      data.result            ||   // ← primary key seen in real responses
-      data.RESPONSE          ||
-      data.response          ||
-      data.leads             ||
-      data.data              ||
-      data.Results           ||
-      data.enquiries         ||
-      (Array.isArray(data) ? data : null);
+    console.log(`[IndiaMART] Page ${page + 1} (start=${start}): fetched ${pageLeads.length} leads.`);
+    allLeads.push(...pageLeads.map(normalizeLead));
 
-    if (!leads) {
-      // Dump the actual shape so it appears in the activity log
-      throw new Error(`Unknown response shape. Top-level keys: ${Object.keys(data).join(', ')} | Sample: ${JSON.stringify(data).slice(0, 300)}`);
-    }
+    // If we got fewer than PAGE_SIZE, there are no more pages
+    if (pageLeads.length < PAGE_SIZE) break;
 
-    if (!Array.isArray(leads)) {
-      throw new Error(`"leads" field is not an array: ${JSON.stringify(leads).slice(0, 200)}`);
-    }
+    // Small polite delay between pages so IndiaMART doesn't rate-limit us
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(r => setTimeout(r, 800));
+  }
 
-    console.log(`[IndiaMART] Parsed ${leads.length} leads from response.`);
-    return leads.map(normalizeLead);
-  });
+  console.log(`[IndiaMART] Total leads fetched across all pages: ${allLeads.length}`);
+  return allLeads;
 }
 
 /* ── sendMessage ─────────────────────────────────────────────────────
