@@ -1,112 +1,34 @@
-import axios from "axios";
+import axios from 'axios';
 
-const API = "http://localhost:5000";
+const BASE = process.env.NODE_ENV === 'production' 
+  ? 'https://indiamart-autopick-1-5ayn.onrender.com/api' 
+  : `http://${window.location.hostname}:3001/api`;
 
-// ==========================
-// LEADS
-// ==========================
+const api = axios.create({ baseURL: BASE, timeout: 15000 });
 
-// Get Leads
-export const getLeads = async () => {
-  const res = await axios.get(`${API}/leads`);
-  return res.data;
+export const getConfig      = ()       => api.get('/config').then(r => r.data.config);
+export const saveConfig     = (data)   => api.post('/config', data).then(r => r.data);
+export const uploadCookies  = (cookies)=> api.post('/upload-cookies', { cookies }).then(r => r.data);
+
+export const startAutoMode  = ()       => api.post('/start').then(r => r.data);
+export const stopAutoMode   = ()       => api.post('/stop').then(r => r.data);
+export const getStatus      = ()       => api.get('/status').then(r => r.data);
+
+export const getLeads       = (params) => api.get('/leads', { params }).then(r => r.data);
+export const getStats       = ()       => api.get('/stats').then(r => r.data.stats);
+export const resetCounter   = ()       => api.post('/reset-counter').then(r => r.data);
+export const acceptLead     = (id)     => api.post(`/leads/${id}/accept`).then(r => r.data);
+export const skipLead       = (id)     => api.post(`/leads/${id}/skip`).then(r => r.data);
+export const clearLeads     = ()       => api.delete('/leads').then(r => r.data);
+
+export const getLogs        = (limit)  => api.get('/logs', { params: { limit } }).then(r => r.data.logs);
+export const clearLogs      = ()       => api.delete('/logs').then(r => r.data);
+
+export const exportLeads    = (format, status) => {
+  const params = new URLSearchParams({ format, ...(status ? { status } : {}) });
+  window.open(`${BASE}/export?${params}`, '_blank');
 };
 
-// Accept Lead
-export const acceptLead = async (id) => {
-  const res = await axios.post(`${API}/accept`, { id });
-  return res.data;
-};
+export const testTelegram   = (token, chat_id) => api.post('/telegram/test', { token, chat_id }).then(r => r.data);
 
-// Skip Lead
-export const skipLead = async (id) => {
-  const res = await axios.post(`${API}/skip`, { id });
-  return res.data;
-};
-
-// Export Leads
-export const exportLeads = async () => {
-  const res = await axios.get(`${API}/export`);
-  return res.data;
-};
-
-// Clear Leads
-export const clearLeads = async () => {
-  const res = await axios.delete(`${API}/clear`);
-  return res.data;
-};
-
-// ==========================
-// CONFIG
-// ==========================
-
-// Get Config
-export const getConfig = async () => {
-  const res = await axios.get(`${API}/config`);
-  return res.data;
-};
-
-// Save Config
-export const saveConfig = async (data) => {
-  const res = await axios.post(`${API}/config`, data);
-  return res.data;
-};
-
-// Upload Cookies
-export const uploadCookies = async (cookies) => {
-  const res = await axios.post(`${API}/upload-cookies`, {
-    cookies,
-  });
-
-  return res.data;
-};
-
-// Telegram Test
-export const testTelegram = async (data) => {
-  const res = await axios.post(`${API}/test-telegram`, data);
-  return res.data;
-};
-
-// ==========================
-// STATS & STATUS
-// ==========================
-
-// Get Stats
-export const getStats = async () => {
-  const res = await axios.get(`${API}/stats`);
-  return res.data;
-};
-
-// Get Status
-export const getStatus = async () => {
-  const res = await axios.get(`${API}/status`);
-  return res.data;
-};
-
-// Start Auto Mode
-export const startAutoMode = async () => {
-  const res = await axios.post(`${API}/start-auto`);
-  return res.data;
-};
-
-// Stop Auto Mode
-export const stopAutoMode = async () => {
-  const res = await axios.post(`${API}/stop-auto`);
-  return res.data;
-};
-
-// ==========================
-// LOGS
-// ==========================
-
-// Get Logs
-export const getLogs = async () => {
-  const res = await axios.get(`${API}/logs`);
-  return res.data;
-};
-
-// Clear Logs
-export const clearLogs = async () => {
-  const res = await axios.delete(`${API}/logs`);
-  return res.data;
-};
+export default api;
