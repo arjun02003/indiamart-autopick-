@@ -1,5 +1,5 @@
 const db                       = require('./db');
-const { fetchLeads, sendMessage } = require('./services/indiamartService');
+const { fetchRecentLeads, sendMessage } = require('./services/indiamartService');
 const { sendTelegramNotification } = require('./services/telegramService');
 const { scoreLead, extractMedicineNames, extractTags, isHighPriority } = require('./services/aiScoringService');
 
@@ -97,7 +97,7 @@ async function runCycle() {
 
     let leads;
     try {
-      leads = await fetchLeads(config.cookies, proxyUrl);
+      leads = await fetchRecentLeads(config.cookies, proxyUrl);
     } catch (err) {
       if (err.code === 'SESSION_EXPIRED') {
         sessionExpired = true;
@@ -122,8 +122,6 @@ async function runCycle() {
     let accepted = 0, skipped = 0;
 
     for (const rawLead of leads) {
-      await randomDelay(300, 1200);
-
       // Null-safe — ensure all string fields are strings
       const lead = {
         ...rawLead,
@@ -136,7 +134,7 @@ async function runCycle() {
         email        : String(rawLead.email || ''),
       };
 
-      // Check if already replied — if so, skip re-processing
+      // Skip leads already replied to — no delay needed
       const existing = db.prepare('SELECT id, replied FROM leads WHERE lead_id = ?').get(lead.lead_id);
       if (existing && existing.replied) continue;
 

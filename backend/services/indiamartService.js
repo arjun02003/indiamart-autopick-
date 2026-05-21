@@ -149,7 +149,7 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
             'Content-Type': 'application/json',
           },
           proxy  : buildProxy(proxyUrl),
-          timeout: 30000,
+          timeout: 60000,
         }
       );
 
@@ -244,4 +244,38 @@ async function sendMessage(cookiesRaw, leadId, messageText, proxyUrl = '') {
   });
 }
 
-module.exports = { fetchLeads, sendMessage, parseCookies };
+module.exports = { fetchLeads, fetchRecentLeads, sendMessage, parseCookies };
+
+/* ── fetchRecentLeads ────────────────────────────────────────────────
+   Fetches ONLY the latest 50 leads (page 1) — used by the worker cycle.
+   Fast, lightweight, won't timeout. New leads appear within 10s.
+*/
+async function fetchRecentLeads(cookiesRaw, proxyUrl = '') {
+  const cookieString = parseCookies(cookiesRaw);
+  if (!cookieString) throw new Error('No valid cookies provided');
+
+  return await withRetry(async () => {
+    const response = await axios.post(
+      CONTACT_LIST_URL,
+      { page: 1, limit: 50, modid: 'ALL', folder: 'ALL', flag: 'RECENT' },
+      {
+        headers: { ...DEFAULT_HEADERS, 'Cookie': cookieString, 'Content-Type': 'application/json' },
+        proxy  : buildProxy(proxyUrl),
+        timeout: 60000,
+      }
+    );
+
+    const data = response.data;
+    if (isSessionExpired(data)) {
+      const e = new Error('SESSION_EXPIRED'); e.code = 'SESSION_EXPIRED'; throw e;
+    }
+
+    const leads = data.result || data.RESPONSE || data.response || data.leads ||
+                  data.data || data.Results || data.enquiries ||
+                  (Array.isArray(data) ? data : null);
+
+    if (!leads || !Array.isArray(leads)) return [];
+    console.log(`[IndiaMART] Recent fetch: ${leads.length} leads`);
+    return leads.map(normalizeLead);
+  });
+}
