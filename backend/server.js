@@ -87,12 +87,17 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`✅ Backend running on http://localhost:${PORT}`);
 
-  // Auto-start worker ONLY if it was previously running
-  const config = db.prepare('SELECT is_running FROM config WHERE id = 1').get();
-  if (config && config.is_running === 1) {
-    worker.startWorker(broadcast);
+  // Always reset is_running on startup — prevents stale session errors
+  db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
+
+  // Only auto-start worker if valid cookies are present
+  const config = db.prepare('SELECT cookies FROM config WHERE id = 1').get();
+  const hasCookies = config && config.cookies && config.cookies.length > 10 && config.cookies !== '[]';
+
+  if (hasCookies) {
+    console.log('🍪 Cookies found — Auto Mode ready. Click Start to begin.');
   } else {
-    console.log('ℹ️ Auto Mode is OFF. Waiting for user to start it manually.');
+    console.log('ℹ️ No cookies saved yet. Go to Settings → upload your IndiaMART cookies.');
   }
 });
 

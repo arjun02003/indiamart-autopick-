@@ -43,7 +43,9 @@ export function LeadProvider({ children }) {
     try {
       const s = await getStatus();
       setIsRunning(s.running);
-      setSessionExpired(s.sessionExpired);
+      // Only show session expired if the worker is/was actively running
+      if (!s.running) setSessionExpired(false);
+      else setSessionExpired(s.sessionExpired);
     } catch (_) {}
   }, []);
 

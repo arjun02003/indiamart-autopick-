@@ -292,6 +292,8 @@ function stopWorker() {
     workerTimer = null;
     log('INFO', '⛔ Auto mode stopped');
   }
+  isProcessing = false;
+  sessionExpired = false; // reset so banner clears on next start
 }
 
 function isWorkerRunning() { return workerTimer !== null; }
