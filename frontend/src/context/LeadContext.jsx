@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getStats, getStatus, startAutoMode, stopAutoMode } from '../services/api';
 
+/* ── Safe default — prevents null-destructure crashes on hot-reload ── */
 const DEFAULT_LEAD_CTX = {
   stats: { total: 0, accepted: 0, skipped: 0, replied: 0, limit: 100, current: 0, high_priority: 0, avg_score: 0, topCountries: [], topMedicines: [] },
   isRunning: false, sessionExpired: false, notifications: [],
@@ -12,17 +13,19 @@ const DEFAULT_LEAD_CTX = {
 const LeadContext = createContext(DEFAULT_LEAD_CTX);
 
 export function LeadProvider({ children }) {
-  const [stats, setStats]           = useState({ total: 0, accepted: 0, skipped: 0, replied: 0, limit: 100, current: 0, high_priority: 0, avg_score: 0, topCountries: [], topMedicines: [] });
-  const [isRunning, setIsRunning]   = useState(false);
+  const [stats,          setStats]          = useState(DEFAULT_LEAD_CTX.stats);
+  const [isRunning,      setIsRunning]      = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
-  const [notifications, setNotifications]   = useState([]);
-  const [startedThisSession, setStartedThisSession] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('theme') !== 'light';
-  });
-  const sseRef = useRef(null);
+  const [notifications,  setNotifications]  = useState([]);
+  const [isDarkMode,     setIsDarkMode]     = useState(() => localStorage.getItem('theme') !== 'light');
 
-  /* ── Dark mode ──────────────────────────────────────────────── */
+  // Refs — avoid stale closures inside SSE listeners
+  const sseRef              = useRef(null);
+  const notifCounter        = useRef(0);
+  const startedThisSession  = useRef(false);  // ref not state — SSE closure reads latest value
+  const addNotifRef         = useRef(null);   // stable ref to addNotification
+
+  /* ── Dark mode ─────────────────────────────────────────────────── */
   const toggleDarkMode = useCallback(() => {
     setIsDarkMode(prev => {
       const next = !prev;
@@ -33,14 +36,23 @@ export function LeadProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!isDarkMode) {
-      document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
-    }
+    document.documentElement.classList.toggle('light', !isDarkMode);
   }, [isDarkMode]);
 
-  /* ── Poll stats every 5 s ───────────────────────────────────── */
+  /* ── Notifications ─────────────────────────────────────────────── */
+  const addNotification = useCallback((type, message) => {
+    const id = `n${++notifCounter.current}_${Date.now()}`; // always unique
+    setNotifications(p => [...p.slice(-9), { id, type, message }]);
+    const dur = type === 'priority' ? 8000 : 5000;
+    setTimeout(() => setNotifications(p => p.filter(n => n.id !== id)), dur);
+  }, []);
+  addNotifRef.current = addNotification; // keep ref in sync
+
+  const dismissNotification = useCallback((id) => {
+    setNotifications(p => p.filter(n => n.id !== id));
+  }, []);
+
+  /* ── Poll stats / status ────────────────────────────────────────── */
   const refreshStats = useCallback(async () => {
     try {
       const s = await getStats();
@@ -52,116 +64,128 @@ export function LeadProvider({ children }) {
     try {
       const s = await getStatus();
       setIsRunning(s.running);
-      // Only show session expired if the worker is/was actively running
+      // Only surface sessionExpired when worker is actively running
       if (!s.running) setSessionExpired(false);
-      else setSessionExpired(s.sessionExpired);
     } catch (_) {}
   }, []);
 
-  /* ── SSE connection ─────────────────────────────────────────── */
+  /* ── SSE connection ─────────────────────────────────────────────── */
   const connectSSE = useCallback(() => {
-    if (sseRef.current) sseRef.current.close();
-    const sseUrl = import.meta.env.PROD
+    if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+
+    const url = import.meta.env.PROD
       ? 'https://indiamart-autopick-1-5ayn.onrender.com/api/events'
       : `http://${window.location.hostname}:3001/api/events`;
-    const es = new EventSource(sseUrl);
 
-    es.addEventListener('stats',           e => setStats(prev => ({ ...prev, ...JSON.parse(e.data) })));
+    const es = new EventSource(url);
+
+    es.addEventListener('stats', e => {
+      try { setStats(prev => ({ ...prev, ...JSON.parse(e.data) })); } catch (_) {}
+    });
+
     es.addEventListener('session_expired', () => {
       setIsRunning(false);
-      // Only show banner/notification if user explicitly started this session
-      if (startedThisSession) {
+      setSessionExpired(false); // reset — don't persist banner across page loads
+      // Only notify if user actively clicked Start this session
+      if (startedThisSession.current) {
         setSessionExpired(true);
-        addNotification('error', '🍪 Cookies expired — go to Settings to re-upload');
+        addNotifRef.current?.('warning', '🍪 Cookies expired — go to Settings → re-upload cookies');
       }
     });
-    es.addEventListener('status_update',   e => {
-      const d = JSON.parse(e.data);
-      if (d.isRunning !== undefined) setIsRunning(d.isRunning);
+
+    es.addEventListener('status_update', e => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.isRunning !== undefined) setIsRunning(d.isRunning);
+      } catch (_) {}
     });
-    es.addEventListener('cycle_done', () => { refreshStats(); });
+
+    es.addEventListener('cycle_done', () => refreshStats());
+
     es.addEventListener('lead_accepted', e => {
-      const lead = JSON.parse(e.data);
-      const priorityEmoji = lead.priority === 'High' ? '🔥' : lead.priority === 'Medium' ? '⭐' : '';
-      addNotification('success', `${priorityEmoji} Lead accepted: ${lead.customer_name} — ${lead.product} [Score: ${lead.ai_score}]`);
+      try {
+        const lead = JSON.parse(e.data);
+        const em = lead.priority === 'High' ? '🔥' : lead.priority === 'Medium' ? '⭐' : '✅';
+        addNotifRef.current?.('success', `${em} ${lead.customer_name} — ${(lead.product||'').slice(0,40)} [${lead.ai_score}pts]`);
+      } catch (_) {}
     });
+
     es.addEventListener('priority_lead', e => {
-      const lead = JSON.parse(e.data);
-      addNotification('priority', `🔥 HIGH PRIORITY LEAD! ${lead.customer_name} from ${lead.country} — Score: ${lead.ai_score}/100`);
+      try {
+        const lead = JSON.parse(e.data);
+        addNotifRef.current?.('priority', `🔥 HIGH PRIORITY: ${lead.customer_name} from ${lead.country} — Score: ${lead.ai_score}/100`);
+      } catch (_) {}
     });
+
     es.addEventListener('lead_captured', e => {
-      const lead = JSON.parse(e.data);
-      addNotification('info', `📥 Lead captured via Extension: ${lead.customer_name}`);
+      try {
+        const lead = JSON.parse(e.data);
+        addNotifRef.current?.('info', `📥 Extension captured: ${lead.customer_name}`);
+      } catch (_) {}
     });
+
     es.addEventListener('log', e => {
-      const { type, message } = JSON.parse(e.data);
-      // Only show ERROR toasts if user actively started this session
-      // and filter out session-expired (handled by dedicated banner)
-      if (type === 'ERROR' && startedThisSession && !message.toLowerCase().includes('session')) {
-        addNotification('error', message);
-      }
+      try {
+        const { type, message } = JSON.parse(e.data);
+        // Only show error toasts if user started this session AND it's not a session error
+        if (type === 'ERROR' && startedThisSession.current && !message.toLowerCase().includes('session')) {
+          addNotifRef.current?.('error', message);
+        }
+      } catch (_) {}
     });
-    es.onerror = () => setTimeout(connectSSE, 5000);
+
+    es.onerror = () => {
+      es.close();
+      sseRef.current = null;
+      setTimeout(connectSSE, 5000); // reconnect after 5s
+    };
 
     sseRef.current = es;
-  }, [refreshStats]);
+  }, [refreshStats]); // stable — uses refs for startedThisSession & addNotification
 
-  /* ── Notifications ──────────────────────────────────────────── */
-  const notifCounter = useRef(0);
-  const addNotification = useCallback((type, message) => {
-    const id = `notif_${++notifCounter.current}_${Date.now()}`; // guaranteed unique
-    setNotifications(p => [...p.slice(-9), { id, type, message }]);
-    const duration = type === 'priority' ? 8000 : 5000;
-    setTimeout(() => setNotifications(p => p.filter(n => n.id !== id)), duration);
-  }, []);
-
-  const dismissNotification = useCallback((id) => {
-    setNotifications(p => p.filter(n => n.id !== id));
-  }, []);
-
-  /* ── Auto mode toggle ───────────────────────────────────────── */
+  /* ── Auto mode toggle ───────────────────────────────────────────── */
   const toggleAutoMode = useCallback(async () => {
     try {
       if (isRunning) {
         await stopAutoMode();
         setIsRunning(false);
         setSessionExpired(false);
-        setStartedThisSession(false);
+        startedThisSession.current = false;
       } else {
         const result = await startAutoMode();
-        if (result && result.success === false) {
-          // Backend rejected start (e.g. no cookies)
-          addNotification('warning', `⚙️ ${result.message || 'Go to Settings and upload your IndiaMART cookies first.'}`);
+        if (result?.success === false) {
+          addNotifRef.current?.('warning', `⚙️ ${result.message || 'Upload IndiaMART cookies in Settings first.'}`);
           return;
         }
         setIsRunning(true);
         setSessionExpired(false);
-        setStartedThisSession(true);
-        addNotification('info', '▶ Auto Mode started — fetching leads…');
+        startedThisSession.current = true;
+        addNotifRef.current?.('info', '▶ Auto Mode started — fetching leads…');
       }
     } catch (e) {
-      addNotification('error', `Failed: ${e.message}`);
+      addNotifRef.current?.('error', `Failed to toggle auto mode: ${e.message}`);
     }
-  }, [isRunning, addNotification]);
+  }, [isRunning]);
 
   const resetLimitCounter = useCallback(async () => {
     try {
       const { resetCounter } = await import('../services/api');
       await resetCounter();
-      addNotification('success', '🔄 Accepted counter reset to 0');
+      addNotifRef.current?.('success', '🔄 Counter reset to 0');
       refreshStats();
     } catch (e) {
-      addNotification('error', `Reset failed: ${e.message}`);
+      addNotifRef.current?.('error', `Reset failed: ${e.message}`);
     }
-  }, [refreshStats, addNotification]);
+  }, [refreshStats]);
 
+  /* ── Mount: init stats, status, SSE ────────────────────────────── */
   useEffect(() => {
     refreshStats();
     refreshStatus();
     connectSSE();
     const t = setInterval(() => { refreshStats(); refreshStatus(); }, 5000);
     return () => { clearInterval(t); sseRef.current?.close(); };
-  }, [refreshStats, refreshStatus, connectSSE]);
+  }, []); // run once on mount only — functions are stable via useCallback
 
   return (
     <LeadContext.Provider value={{
