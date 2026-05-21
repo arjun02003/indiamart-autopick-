@@ -1,7 +1,15 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getStats, getStatus, startAutoMode, stopAutoMode } from '../services/api';
 
-const LeadContext = createContext(null);
+const DEFAULT_LEAD_CTX = {
+  stats: { total: 0, accepted: 0, skipped: 0, replied: 0, limit: 100, current: 0, high_priority: 0, avg_score: 0, topCountries: [], topMedicines: [] },
+  isRunning: false, sessionExpired: false, notifications: [],
+  isDarkMode: true,
+  addNotification: () => {}, dismissNotification: () => {},
+  toggleAutoMode: () => {}, refreshStats: () => {}, resetLimitCounter: () => {},
+  toggleDarkMode: () => {},
+};
+const LeadContext = createContext(DEFAULT_LEAD_CTX);
 
 export function LeadProvider({ children }) {
   const [stats, setStats]           = useState({ total: 0, accepted: 0, skipped: 0, replied: 0, limit: 100, current: 0, high_priority: 0, avg_score: 0, topCountries: [], topMedicines: [] });
@@ -87,7 +95,11 @@ export function LeadProvider({ children }) {
     });
     es.addEventListener('log', e => {
       const { type, message } = JSON.parse(e.data);
-      if (type === 'ERROR') addNotification('error', message);
+      // Only show ERROR toasts if user actively started this session
+      // and filter out session-expired (handled by dedicated banner)
+      if (type === 'ERROR' && startedThisSession && !message.toLowerCase().includes('session')) {
+        addNotification('error', message);
+      }
     });
     es.onerror = () => setTimeout(connectSSE, 5000);
 
@@ -116,10 +128,16 @@ export function LeadProvider({ children }) {
         setSessionExpired(false);
         setStartedThisSession(false);
       } else {
-        await startAutoMode();
+        const result = await startAutoMode();
+        if (result && result.success === false) {
+          // Backend rejected start (e.g. no cookies)
+          addNotification('warning', `⚙️ ${result.message || 'Go to Settings and upload your IndiaMART cookies first.'}`);
+          return;
+        }
         setIsRunning(true);
         setSessionExpired(false);
-        setStartedThisSession(true); // mark that user started this session
+        setStartedThisSession(true);
+        addNotification('info', '▶ Auto Mode started — fetching leads…');
       }
     } catch (e) {
       addNotification('error', `Failed: ${e.message}`);

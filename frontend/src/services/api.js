@@ -23,7 +23,11 @@ export const saveConfig  = (body)   => request('POST', '/api/config', body);
 export const uploadCookies = (cookies) => request('POST', '/api/upload-cookies', { cookies });
 
 /* ── Worker ─────────────────────────────────────────────────── */
-export const startAutoMode = () => request('POST', '/api/start');
+export const startAutoMode = async () => {
+  const res  = await fetch(`${API_BASE}/api/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+  const data = await res.json();
+  return data; // always return body — caller checks data.success
+};
 export const stopAutoMode  = () => request('POST', '/api/stop');
 export const getStatus     = () => request('GET',  '/api/status');
 

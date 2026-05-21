@@ -139,6 +139,16 @@ router.post('/login-cookies', (req, res) => {
 ═══════════════════════════════════════════════════════════════ */
 
 router.post('/start', (req, res) => {
+  // Guard: already running
+  if (worker.isWorkerRunning()) {
+    return res.json({ success: true, message: 'Already running' });
+  }
+  // Guard: no cookies saved
+  const cfg = db.prepare('SELECT cookies FROM config WHERE id = 1').get();
+  const hasCookies = cfg && cfg.cookies && cfg.cookies.length > 10 && cfg.cookies !== '[]';
+  if (!hasCookies) {
+    return res.status(400).json({ success: false, message: 'No cookies found. Please upload IndiaMART cookies in Settings first.' });
+  }
   const app = req.app;
   db.prepare('UPDATE config SET is_running = 1 WHERE id = 1').run();
   worker.startWorker(app.locals.broadcast);
