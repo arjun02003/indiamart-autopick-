@@ -121,18 +121,24 @@ async function runCycle() {
 
     let accepted = 0, skipped = 0;
 
-    for (const lead of leads) {
+    for (const rawLead of leads) {
       await randomDelay(300, 1200);
 
-      // ── Duplicate check
+      // Null-safe — ensure all string fields are strings
+      const lead = {
+        ...rawLead,
+        product      : String(rawLead.product || ''),
+        message      : String(rawLead.message || ''),
+        country      : String(rawLead.country || ''),
+        customer_name: String(rawLead.customer_name || ''),
+        company_name : String(rawLead.company_name || ''),
+        mobile       : String(rawLead.mobile || ''),
+        email        : String(rawLead.email || ''),
+      };
+
+      // Check if already replied — if so, skip re-processing
       const existing = db.prepare('SELECT id, replied FROM leads WHERE lead_id = ?').get(lead.lead_id);
-      if (existing) {
-        if (!existing.replied) {
-          // Try reply again if not replied
-        } else {
-          continue;
-        }
-      }
+      if (existing && existing.replied) continue;
 
       // ── AI Scoring — runs on every lead regardless of filters
       const { score, priority } = scoreLead(lead);
@@ -142,12 +148,12 @@ async function runCycle() {
 
       // ── Skip conditions
       if (isEmpty(lead)) {
-        db.prepare(`INSERT OR IGNORE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
+        db.prepare(`INSERT OR REPLACE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
           .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Empty inquiry', score, priority, JSON.stringify(tags));
         skipped++; continue;
       }
       if (isSpam(lead)) {
-        db.prepare(`INSERT OR IGNORE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
+        db.prepare(`INSERT OR REPLACE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
           .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Spam detected', score, priority, JSON.stringify(tags));
         skipped++; continue;
       }
