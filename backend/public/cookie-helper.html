@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>LeadMed — Cookie Helper</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Outfit',sans-serif;background:#0a0f1e;color:#f1f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
+    .card{background:rgba(20,30,55,0.9);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:2.5rem;max-width:560px;width:100%}
+    h1{font-size:1.5rem;font-weight:700;background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.5rem}
+    p{color:#94a3b8;font-size:.9rem;line-height:1.7;margin-bottom:1.25rem}
+    .step{display:flex;gap:1rem;align-items:flex-start;padding:1rem;background:rgba(10,15,30,.7);border:1px solid rgba(255,255,255,.06);border-radius:10px;margin-bottom:.75rem}
+    .step-num{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;font-weight:700;font-size:.85rem;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .step-text{font-size:.88rem;color:#cbd5e1;line-height:1.6}
+    .step-text strong{color:#f1f5f9}
+    .bookmarklet{display:block;padding:1rem 1.5rem;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;font-weight:700;font-size:1rem;border-radius:10px;text-align:center;text-decoration:none;margin:1.5rem 0;box-shadow:0 4px 20px rgba(99,102,241,.4);cursor:grab}
+    .bookmarklet:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(99,102,241,.5)}
+    .alt{background:rgba(10,15,30,.7);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:1rem}
+    .alt h3{font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
+    code{display:block;background:rgba(0,0,0,.4);padding:.75rem 1rem;border-radius:7px;font-size:.78rem;color:#a5b4fc;word-break:break-all;margin-bottom:.5rem;cursor:pointer;border:1px solid rgba(99,102,241,.2)}
+    code:hover{border-color:rgba(99,102,241,.5)}
+    .status{padding:.75rem 1rem;border-radius:8px;font-size:.85rem;font-weight:600;margin-top:1rem;display:none}
+    .status.success{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);display:block}
+    .status.error{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3);display:block}
+    .btn{padding:.75rem 1.5rem;border-radius:8px;border:none;font-family:inherit;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s;width:100%;margin-top:.75rem}
+    .btn-primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(99,102,241,.4)}
+    .btn-outline{background:rgba(255,255,255,.05);color:#94a3b8;border:1px solid rgba(255,255,255,.08)}
+    .btn-outline:hover{background:rgba(255,255,255,.1);color:#f1f5f9}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div style="font-size:2rem;margin-bottom:.5rem">🍪</div>
+  <h1>IndiaMART Cookie Helper</h1>
+  <p>Use this page to automatically capture your IndiaMART session cookies and send them to your LeadMed backend.</p>
+
+  <!-- Method 1: Bookmarklet -->
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-text"><strong>Drag this button to your bookmarks bar:</strong></div>
+  </div>
+
+  <a class="bookmarklet" id="bookmarklet-link" href="">📋 LeadMed — Grab Cookies</a>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-text">Go to <strong>seller.indiamart.com</strong> and make sure you are <strong>logged in</strong></div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-text">Click the <strong>"LeadMed — Grab Cookies"</strong> bookmark — it will instantly send your cookies to the backend</div>
+  </div>
+
+  <div id="status-box" class="status"></div>
+
+  <!-- Method 2: Manual capture from this page -->
+  <div class="alt" style="margin-top:1.5rem">
+    <h3>⚡ Quick Capture (if already on IndiaMART)</h3>
+    <p style="font-size:.82rem;color:#64748b;margin-bottom:.75rem">If you opened this page from IndiaMART, click below:</p>
+    <button class="btn btn-primary" onclick="captureAndSend()">🚀 Capture & Send Cookies Now</button>
+    <button class="btn btn-outline" onclick="showManual()" style="margin-top:.5rem">📋 Copy Cookies Manually</button>
+    <div id="manual-box" style="display:none;margin-top:.75rem">
+      <code id="cookie-display" onclick="copyCode(this)" title="Click to copy">Click to load cookies...</code>
+      <p style="font-size:.75rem;color:#475569">Click to copy → Paste in Settings → IndiaMART Cookies</p>
+    </div>
+  </div>
+
+  <!-- Backend URL config -->
+  <div style="margin-top:1.25rem;display:flex;gap:.5rem">
+    <input id="backend-url" type="text" value="http://localhost:3001" style="flex:1;padding:.6rem .9rem;background:rgba(10,15,30,.7);border:1px solid rgba(255,255,255,.08);border-radius:7px;color:#f1f5f9;font-family:inherit;font-size:.82rem"/>
+    <button class="btn btn-outline" style="flex:0 0 auto;width:auto;padding:.6rem 1rem;margin:0" onclick="testConnection()">Test</button>
+  </div>
+  <p style="font-size:.72rem;color:#475569;margin-top:.4rem">Backend URL — change if deploying to cloud</p>
+</div>
+
+<script>
+  // Build bookmarklet JS
+  const bookmarkletCode = `
+    (function(){
+      var backend = prompt('LeadMed backend URL (press OK to use default):', 'http://localhost:3001') || 'http://localhost:3001';
+      backend = backend.replace(/\\/+$/, '');
+      var cookies = document.cookie;
+      if(!cookies){ alert('No cookies found. Make sure you are logged into IndiaMART.'); return; }
+      fetch(backend + '/api/upload-cookies', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        mode:'no-cors',
+        body:JSON.stringify({cookies: cookies})
+      }).then(function(){
+        alert('✅ Cookies sent to LeadMed! Go to your dashboard and click Start Auto Mode.');
+      }).catch(function(){
+        // no-cors won't throw — copy fallback
+        navigator.clipboard && navigator.clipboard.writeText(cookies);
+        alert('Cookies copied to clipboard. Paste them in LeadMed Settings.');
+      });
+    })()
+  `.trim().replace(/\s+/g,' ');
+
+  document.getElementById('bookmarklet-link').href = 'javascript:' + encodeURIComponent(bookmarkletCode);
+
+  function getBackend(){ return (document.getElementById('backend-url').value||'http://localhost:3001').replace(/\/+$/,''); }
+
+  async function captureAndSend(){
+    const box = document.getElementById('status-box');
+    const cookies = document.cookie;
+    if(!cookies){ box.className='status error'; box.textContent='❌ No cookies found on this page. You must be on seller.indiamart.com.'; return; }
+
+    box.className='status'; box.style.display='block'; box.style.background='rgba(245,158,11,.1)'; box.style.color='#f59e0b'; box.style.border='1px solid rgba(245,158,11,.3)';
+    box.textContent='⏳ Sending cookies...';
+
+    try{
+      const res = await fetch(getBackend()+'/api/upload-cookies',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({cookies})
+      });
+      const d = await res.json();
+      if(d.success!==false){ box.className='status success'; box.textContent='✅ Cookies sent! Go to Dashboard → Start Auto Mode.'; }
+      else{ box.className='status error'; box.textContent='❌ '+d.message; }
+    } catch(e){
+      box.className='status error'; box.textContent='❌ Cannot reach backend at '+getBackend()+'. Is it running?';
+    }
+  }
+
+  function showManual(){
+    const box = document.getElementById('manual-box');
+    const display = document.getElementById('cookie-display');
+    display.textContent = document.cookie || 'No cookies found on this page.';
+    box.style.display = 'block';
+  }
+
+  function copyCode(el){
+    navigator.clipboard.writeText(el.textContent).then(()=>{
+      el.textContent='✅ Copied!';
+      setTimeout(()=>{ el.textContent = document.cookie; }, 1500);
+    });
+  }
+
+  async function testConnection(){
+    const box = document.getElementById('status-box');
+    try{
+      const res = await fetch(getBackend()+'/api/status');
+      const d = await res.json();
+      box.className='status success';
+      box.textContent='✅ Backend connected! Worker running: '+(d.running?'Yes':'No');
+    } catch(e){
+      box.className='status error';
+      box.textContent='❌ Cannot connect to '+getBackend();
+    }
+  }
+</script>
+</body>
+</html>

@@ -33,6 +33,9 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
+/* ── Serve public helper tools ─────────────────────────────────── */
+app.use(express.static(path.join(__dirname, 'public')));
+
 /* ── Routes ────────────────────────────────────────────────────── */
 app.use('/api',      apiRoutes);
 app.use('/api/auth', authRoutes);
