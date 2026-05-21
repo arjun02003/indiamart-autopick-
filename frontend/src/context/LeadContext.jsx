@@ -8,6 +8,7 @@ export function LeadProvider({ children }) {
   const [isRunning, setIsRunning]   = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [notifications, setNotifications]   = useState([]);
+  const [startedThisSession, setStartedThisSession] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('theme') !== 'light';
   });
@@ -58,7 +59,12 @@ export function LeadProvider({ children }) {
     const es = new EventSource(sseUrl);
 
     es.addEventListener('stats',           e => setStats(prev => ({ ...prev, ...JSON.parse(e.data) })));
-    es.addEventListener('session_expired', () => { setSessionExpired(true); setIsRunning(false); });
+    es.addEventListener('session_expired', () => {
+      // Only show banner if user started worker this session
+      if (startedThisSession) setSessionExpired(true);
+      setIsRunning(false);
+      addNotification('error', '⚠️ Session expired — please re-upload your IndiaMART cookies in Settings');
+    });
     es.addEventListener('status_update',   e => {
       const d = JSON.parse(e.data);
       if (d.isRunning !== undefined) setIsRunning(d.isRunning);
@@ -101,8 +107,17 @@ export function LeadProvider({ children }) {
   /* ── Auto mode toggle ───────────────────────────────────────── */
   const toggleAutoMode = useCallback(async () => {
     try {
-      if (isRunning) { await stopAutoMode(); setIsRunning(false); }
-      else           { await startAutoMode(); setIsRunning(true); setSessionExpired(false); }
+      if (isRunning) {
+        await stopAutoMode();
+        setIsRunning(false);
+        setSessionExpired(false);
+        setStartedThisSession(false);
+      } else {
+        await startAutoMode();
+        setIsRunning(true);
+        setSessionExpired(false);
+        setStartedThisSession(true); // mark that user started this session
+      }
     } catch (e) {
       addNotification('error', `Failed: ${e.message}`);
     }
