@@ -60,10 +60,12 @@ export function LeadProvider({ children }) {
 
     es.addEventListener('stats',           e => setStats(prev => ({ ...prev, ...JSON.parse(e.data) })));
     es.addEventListener('session_expired', () => {
-      // Only show banner if user started worker this session
-      if (startedThisSession) setSessionExpired(true);
       setIsRunning(false);
-      addNotification('error', '⚠️ Session expired — please re-upload your IndiaMART cookies in Settings');
+      // Only show banner/notification if user explicitly started this session
+      if (startedThisSession) {
+        setSessionExpired(true);
+        addNotification('error', '🍪 Cookies expired — go to Settings to re-upload');
+      }
     });
     es.addEventListener('status_update',   e => {
       const d = JSON.parse(e.data);
@@ -93,8 +95,9 @@ export function LeadProvider({ children }) {
   }, [refreshStats]);
 
   /* ── Notifications ──────────────────────────────────────────── */
+  const notifCounter = useRef(0);
   const addNotification = useCallback((type, message) => {
-    const id = Date.now();
+    const id = `notif_${++notifCounter.current}_${Date.now()}`; // guaranteed unique
     setNotifications(p => [...p.slice(-9), { id, type, message }]);
     const duration = type === 'priority' ? 8000 : 5000;
     setTimeout(() => setNotifications(p => p.filter(n => n.id !== id)), duration);

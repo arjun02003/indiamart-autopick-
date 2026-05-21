@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 
-const AuthContext = createContext();
+const DEFAULT_AUTH = { user: null, isAuthenticated: false, login: () => Promise.resolve(), signup: () => Promise.resolve(), loginWithGoogle: () => Promise.resolve(), logout: () => Promise.resolve(), loading: false };
+const AuthContext = createContext(DEFAULT_AUTH);
 
 // ── Simple local auth — no Firebase needed ─────────────────────────
 // Default credentials (change in Settings if needed)
