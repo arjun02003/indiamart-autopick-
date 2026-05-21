@@ -4,17 +4,38 @@ import { getStats, getStatus, startAutoMode, stopAutoMode } from '../services/ap
 const LeadContext = createContext(null);
 
 export function LeadProvider({ children }) {
-  const [stats, setStats]           = useState({ total: 0, accepted: 0, skipped: 0, replied: 0, limit: 100, current: 0 });
+  const [stats, setStats]           = useState({ total: 0, accepted: 0, skipped: 0, replied: 0, limit: 100, current: 0, high_priority: 0, avg_score: 0, topCountries: [], topMedicines: [] });
   const [isRunning, setIsRunning]   = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [notifications, setNotifications]   = useState([]);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('theme') !== 'light';
+  });
   const sseRef = useRef(null);
+
+  /* ── Dark mode ──────────────────────────────────────────────── */
+  const toggleDarkMode = useCallback(() => {
+    setIsDarkMode(prev => {
+      const next = !prev;
+      localStorage.setItem('theme', next ? 'dark' : 'light');
+      document.documentElement.classList.toggle('light', !next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isDarkMode) {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  }, [isDarkMode]);
 
   /* ── Poll stats every 5 s ───────────────────────────────────── */
   const refreshStats = useCallback(async () => {
     try {
       const s = await getStats();
-      setStats(s);
+      setStats(prev => ({ ...prev, ...s }));
     } catch (_) {}
   }, []);
 
@@ -29,23 +50,36 @@ export function LeadProvider({ children }) {
   /* ── SSE connection ─────────────────────────────────────────── */
   const connectSSE = useCallback(() => {
     if (sseRef.current) sseRef.current.close();
-    const sseUrl = process.env.NODE_ENV === 'production'
+    const sseUrl = import.meta.env.PROD
       ? 'https://indiamart-autopick-1-5ayn.onrender.com/api/events'
       : `http://${window.location.hostname}:3001/api/events`;
     const es = new EventSource(sseUrl);
 
-    es.addEventListener('stats',           e => setStats(JSON.parse(e.data)));
+    es.addEventListener('stats',           e => setStats(prev => ({ ...prev, ...JSON.parse(e.data) })));
     es.addEventListener('session_expired', () => { setSessionExpired(true); setIsRunning(false); });
-    es.addEventListener('cycle_done',      e => { refreshStats(); });
-    es.addEventListener('lead_accepted',   e => {
+    es.addEventListener('status_update',   e => {
+      const d = JSON.parse(e.data);
+      if (d.isRunning !== undefined) setIsRunning(d.isRunning);
+    });
+    es.addEventListener('cycle_done', () => { refreshStats(); });
+    es.addEventListener('lead_accepted', e => {
       const lead = JSON.parse(e.data);
-      addNotification('success', `✅ Lead accepted: ${lead.customer_name} — ${lead.product}`);
+      const priorityEmoji = lead.priority === 'High' ? '🔥' : lead.priority === 'Medium' ? '⭐' : '';
+      addNotification('success', `${priorityEmoji} Lead accepted: ${lead.customer_name} — ${lead.product} [Score: ${lead.ai_score}]`);
+    });
+    es.addEventListener('priority_lead', e => {
+      const lead = JSON.parse(e.data);
+      addNotification('priority', `🔥 HIGH PRIORITY LEAD! ${lead.customer_name} from ${lead.country} — Score: ${lead.ai_score}/100`);
+    });
+    es.addEventListener('lead_captured', e => {
+      const lead = JSON.parse(e.data);
+      addNotification('info', `📥 Lead captured via Extension: ${lead.customer_name}`);
     });
     es.addEventListener('log', e => {
       const { type, message } = JSON.parse(e.data);
       if (type === 'ERROR') addNotification('error', message);
     });
-    es.onerror = () => setTimeout(connectSSE, 5000); // auto-reconnect
+    es.onerror = () => setTimeout(connectSSE, 5000);
 
     sseRef.current = es;
   }, [refreshStats]);
@@ -54,7 +88,8 @@ export function LeadProvider({ children }) {
   const addNotification = useCallback((type, message) => {
     const id = Date.now();
     setNotifications(p => [...p.slice(-9), { id, type, message }]);
-    setTimeout(() => setNotifications(p => p.filter(n => n.id !== id)), 5000);
+    const duration = type === 'priority' ? 8000 : 5000;
+    setTimeout(() => setNotifications(p => p.filter(n => n.id !== id)), duration);
   }, []);
 
   const dismissNotification = useCallback((id) => {
@@ -94,7 +129,8 @@ export function LeadProvider({ children }) {
     <LeadContext.Provider value={{
       stats, isRunning, sessionExpired,
       notifications, addNotification, dismissNotification,
-      toggleAutoMode, refreshStats, resetLimitCounter
+      toggleAutoMode, refreshStats, resetLimitCounter,
+      isDarkMode, toggleDarkMode,
     }}>
       {children}
     </LeadContext.Provider>

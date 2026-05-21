@@ -1,0 +1,107 @@
+/* ─────────────────────────────────────────────────────────────────────
+   LeadMed Extension — Sidebar Styles (injected into IndiaMART pages)
+───────────────────────────────────────────────────────────────────── */
+
+#leadmed-sidebar {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  width: 220px !important;
+  background: rgba(10, 15, 30, 0.96) !important;
+  border: 1px solid rgba(99, 102, 241, 0.4) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(99,102,241,0.2) !important;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 13px !important;
+  z-index: 2147483647 !important;
+  color: #f1f5f9 !important;
+  overflow: hidden !important;
+  transition: height 0.2s ease !important;
+}
+
+#leadmed-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 9px 12px !important;
+  background: linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.15)) !important;
+  border-bottom: 1px solid rgba(99,102,241,0.2) !important;
+  cursor: move !important;
+}
+
+#leadmed-header span:first-child { font-size: 1rem !important; }
+
+#leadmed-minimize {
+  margin-left: auto !important;
+  background: none !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  cursor: pointer !important;
+  font-size: 1rem !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  width: 20px !important;
+  height: 20px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+#leadmed-minimize:hover { color: #f1f5f9 !important; }
+
+#leadmed-body {
+  padding: 10px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.lm-status {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  width: fit-content !important;
+}
+.lm-running { background: rgba(16,185,129,0.15) !important; color: #10b981 !important; }
+.lm-stopped { background: rgba(100,116,139,0.15) !important; color: #94a3b8 !important; }
+
+.lm-btn {
+  width: 100% !important;
+  padding: 8px !important;
+  border-radius: 7px !important;
+  border: none !important;
+  font-family: inherit !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+.lm-btn-start {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+  color: white !important;
+}
+.lm-btn-start:hover { transform: translateY(-1px) !important; box-shadow: 0 4px 12px rgba(99,102,241,0.5) !important; }
+.lm-btn-stop {
+  background: rgba(239,68,68,0.15) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(239,68,68,0.3) !important;
+}
+
+#leadmed-log {
+  max-height: 100px !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+.lm-log-entry {
+  font-size: 0.68rem !important;
+  color: #64748b !important;
+  padding: 2px 4px !important;
+  border-radius: 3px !important;
+  word-break: break-word !important;
+  line-height: 1.4 !important;
+}
+
+#leadmed-log::-webkit-scrollbar { width: 3px !important; }
+#leadmed-log::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.4) !important; border-radius: 2px !important; }

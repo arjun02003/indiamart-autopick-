@@ -1,18 +1,40 @@
-# Node
+# Dependencies
 node_modules/
-dist/
-.env
+*/node_modules/
 
-# Database
+# Database — contains your leads & cookies (never commit!)
 *.db
 *.db-shm
 *.db-wal
-backend/indiamart.db*
+backend/indiamart.db
 
-# OS
-.DS_Store
-Thumbs.db
+# Environment variables
+.env
+backend/.env
+frontend/.env
+
+# Build output
+frontend/dist/
+frontend/build/
 
 # Logs
-logs/
 *.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Temp / scratch
+scratch/
+*.tmp
+
+# Docker
+.dockerignore

@@ -11,6 +11,7 @@ db.exec(`
     id INTEGER PRIMARY KEY CHECK (id = 1),
     keywords TEXT DEFAULT '[]',
     countries TEXT DEFAULT '[]',
+    priority_keywords TEXT DEFAULT '[]',
     interval INTEGER DEFAULT 30,
     is_running INTEGER DEFAULT 0,
     cookies TEXT DEFAULT '[]',
@@ -30,21 +31,27 @@ db.exec(`
     customer_name TEXT,
     company_name TEXT,
     product TEXT,
+    medicine_name TEXT DEFAULT '',
     country TEXT,
     mobile TEXT DEFAULT '',
     email TEXT DEFAULT '',
     quantity REAL DEFAULT 0,
     message TEXT DEFAULT '',
+    call_details TEXT DEFAULT '',
     replied INTEGER DEFAULT 0,
     timestamp TEXT,
     status TEXT DEFAULT 'Pending',
-    reason TEXT DEFAULT ''
+    reason TEXT DEFAULT '',
+    ai_score INTEGER DEFAULT 0,
+    priority TEXT DEFAULT 'Low',
+    tags TEXT DEFAULT '[]'
   );
 
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    role TEXT DEFAULT 'viewer',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -64,13 +71,20 @@ const migrations = [
   `ALTER TABLE config ADD COLUMN proxy_url TEXT DEFAULT ''`,
   `ALTER TABLE config ADD COLUMN min_quantity INTEGER DEFAULT 0`,
   `ALTER TABLE config ADD COLUMN reply_enabled INTEGER DEFAULT 1`,
+  `ALTER TABLE config ADD COLUMN accept_limit INTEGER DEFAULT 100`,
+  `ALTER TABLE config ADD COLUMN current_accepted_count INTEGER DEFAULT 0`,
+  `ALTER TABLE config ADD COLUMN priority_keywords TEXT DEFAULT '[]'`,
   `ALTER TABLE leads ADD COLUMN quantity REAL DEFAULT 0`,
   `ALTER TABLE leads ADD COLUMN mobile TEXT DEFAULT ''`,
   `ALTER TABLE leads ADD COLUMN email TEXT DEFAULT ''`,
   `ALTER TABLE leads ADD COLUMN message TEXT DEFAULT ''`,
   `ALTER TABLE leads ADD COLUMN replied INTEGER DEFAULT 0`,
-  `ALTER TABLE config ADD COLUMN accept_limit INTEGER DEFAULT 100`,
-  `ALTER TABLE config ADD COLUMN current_accepted_count INTEGER DEFAULT 0`,
+  `ALTER TABLE leads ADD COLUMN ai_score INTEGER DEFAULT 0`,
+  `ALTER TABLE leads ADD COLUMN priority TEXT DEFAULT 'Low'`,
+  `ALTER TABLE leads ADD COLUMN tags TEXT DEFAULT '[]'`,
+  `ALTER TABLE leads ADD COLUMN medicine_name TEXT DEFAULT ''`,
+  `ALTER TABLE leads ADD COLUMN call_details TEXT DEFAULT ''`,
+  `ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'viewer'`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }
@@ -81,10 +95,10 @@ const existing = db.prepare('SELECT id FROM config WHERE id = 1').get();
 if (!existing) {
   db.prepare(`
     INSERT INTO config
-      (id, keywords, countries, interval, is_running, cookies,
+      (id, keywords, countries, priority_keywords, interval, is_running, cookies,
        auto_reply_msg, telegram_token, telegram_chat_id, proxy_url, min_quantity, reply_enabled,
        accept_limit, current_accepted_count)
-    VALUES (1, '[]', '[]', 1, 0, '[]',
+    VALUES (1, '[]', '[]', '[]', 1, 0, '[]',
       'Thank you for your inquiry about {product}. We will get back to you shortly.',
       '', '', '', 0, 1, 100, 0)
   `).run();

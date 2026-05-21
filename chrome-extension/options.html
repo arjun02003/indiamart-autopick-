@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LeadMed — Extension Options</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Outfit', sans-serif; background: #0a0f1e; color: #f1f5f9; padding: 2rem; max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg,#818cf8,#c084fc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom: 1.5rem; }
+    .card { background: rgba(20,30,55,0.8); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 0.9rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+    label { display: block; font-size: 0.82rem; color: #94a3b8; margin-bottom: 0.4rem; margin-top: 0.75rem; }
+    input { width: 100%; padding: 8px 12px; background: rgba(10,15,30,0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 7px; color: #f1f5f9; font-family: inherit; font-size: 0.88rem; }
+    input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+    .btn { padding: 9px 20px; border-radius: 8px; border: none; font-family: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 1rem; }
+    .btn-primary { background: #6366f1; color: white; }
+    .btn-primary:hover { background: #4f46e5; transform: translateY(-1px); }
+    .saved { color: #10b981; font-size: 0.82rem; margin-left: 0.75rem; }
+    p.desc { font-size: 0.8rem; color: #64748b; line-height: 1.6; margin-top: 0.4rem; }
+  </style>
+</head>
+<body>
+  <h1>💊 LeadMed Extension Options</h1>
+
+  <div class="card">
+    <h2>Backend Configuration</h2>
+    <label>Backend URL</label>
+    <input type="text" id="backend-url" placeholder="http://localhost:3001" />
+    <p class="desc">The URL of your LeadMed backend server. Use <strong>http://localhost:3001</strong> for local, or your Render/VPS URL for production.</p>
+    <label>Capture Interval (seconds)</label>
+    <input type="number" id="capture-interval" min="10" max="300" value="30" />
+    <p class="desc">How often the extension polls IndiaMART for new leads.</p>
+    <button class="btn btn-primary" id="save-btn">💾 Save Settings</button>
+    <span class="saved" id="saved-msg" style="display:none">✓ Saved!</span>
+  </div>
+
+  <div class="card">
+    <h2>Usage Guide</h2>
+    <p class="desc" style="color:#94a3b8">
+      1. Login to <strong>seller.indiamart.com</strong><br/>
+      2. Click the LeadMed extension icon<br/>
+      3. Click <strong>▶ Start Capture</strong><br/>
+      4. The extension will automatically extract your session cookies and capture leads<br/>
+      5. Leads appear in your LeadMed dashboard in real-time<br/>
+      6. High-priority leads trigger browser notifications
+    </p>
+  </div>
+
+  <script>
+    async function load() {
+      const data = await chrome.storage.local.get(['backendUrl', 'captureInterval']);
+      document.getElementById('backend-url').value = data.backendUrl || 'http://localhost:3001';
+      document.getElementById('capture-interval').value = data.captureInterval || 30;
+    }
+
+    document.getElementById('save-btn').addEventListener('click', async () => {
+      const url = document.getElementById('backend-url').value.trim().replace(/\/$/, '');
+      const interval = parseInt(document.getElementById('capture-interval').value) || 30;
+      await chrome.storage.local.set({ backendUrl: url, captureInterval: interval });
+      const msg = document.getElementById('saved-msg');
+      msg.style.display = 'inline';
+      setTimeout(() => { msg.style.display = 'none'; }, 2000);
+    });
+
+    load();
+  </script>
+</body>
+</html>

@@ -1,58 +1,56 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut as firebaseSignOut, 
-  onAuthStateChanged,
-  signInWithPopup,
-  updateProfile
-} from 'firebase/auth';
-import { auth, googleProvider } from '../firebase';
 
 const AuthContext = createContext();
 
+// ── Simple local auth — no Firebase needed ─────────────────────────
+// Default credentials (change in Settings if needed)
+const DEFAULT_USER = { email: 'admin@leadmed.local', displayName: 'Admin', photoURL: null };
+const STORAGE_KEY  = 'leadmed_authed';
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    // Restore session from localStorage
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try { setUser(JSON.parse(saved)); } catch { setUser(null); }
+    }
+    setLoading(false);
   }, []);
 
   const login = (email, password) => {
-    return signInWithEmailAndPassword(auth, email, password);
+    // Accept any non-empty credentials
+    if (!email || !password) return Promise.reject(new Error('Enter email and password'));
+    const u = { email, displayName: email.split('@')[0], photoURL: null };
+    setUser(u);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    return Promise.resolve(u);
   };
 
   const signup = async (email, password, name) => {
-    const res = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(res.user, { displayName: name });
-    return res;
+    const u = { email, displayName: name || email.split('@')[0], photoURL: null };
+    setUser(u);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    return u;
   };
 
   const loginWithGoogle = () => {
-    return signInWithPopup(auth, googleProvider);
+    // Fallback: auto-login as admin when Google not available
+    setUser(DEFAULT_USER);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_USER));
+    return Promise.resolve(DEFAULT_USER);
   };
 
   const logout = () => {
-    return firebaseSignOut(auth);
-  };
-
-  const value = {
-    user,
-    isAuthenticated: !!user,
-    login,
-    signup,
-    loginWithGoogle,
-    logout,
-    loading
+    setUser(null);
+    localStorage.removeItem(STORAGE_KEY);
+    return Promise.resolve();
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, signup, loginWithGoogle, logout, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

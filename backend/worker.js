@@ -1,11 +1,12 @@
 const db                       = require('./db');
 const { fetchLeads, sendMessage } = require('./services/indiamartService');
 const { sendTelegramNotification } = require('./services/telegramService');
+const { scoreLead, extractMedicineNames, extractTags, isHighPriority } = require('./services/aiScoringService');
 
 let workerTimer    = null;
-let broadcastFn    = null;   // injected from server after boot
+let broadcastFn    = null;
 let sessionExpired = false;
-let isProcessing   = false;  // Lock to prevent concurrent cycles
+let isProcessing   = false;
 
 /* ── Logging ───────────────────────────────────────────────────── */
 function log(type, message) {
@@ -73,174 +74,186 @@ async function runCycle() {
       return;
     }
 
-  const keywords   = JSON.parse(config.keywords  || '[]').map(k => k.toLowerCase());
-  const countries  = JSON.parse(config.countries || '[]').map(c => c.toLowerCase());
-  const minQty     = config.min_quantity || 0;
-  const proxyUrl   = config.proxy_url    || '';
-  const replyEnabled = config.reply_enabled === 1;
-  const replyMsg   = config.auto_reply_msg || 'Thank you for your inquiry.';
-  const tgToken    = config.telegram_token    || '';
-  const tgChatId   = config.telegram_chat_id  || '';
-  const acceptLimit = config.accept_limit || 100;
-  const currentCount = config.current_accepted_count || 0;
+    const keywords   = JSON.parse(config.keywords  || '[]').map(k => k.toLowerCase());
+    const countries  = JSON.parse(config.countries || '[]').map(c => c.toLowerCase());
+    const minQty     = config.min_quantity || 0;
+    const proxyUrl   = config.proxy_url    || '';
+    const replyEnabled = config.reply_enabled === 1;
+    const replyMsg   = config.auto_reply_msg || 'Thank you for your inquiry.';
+    const tgToken    = config.telegram_token    || '';
+    const tgChatId   = config.telegram_chat_id  || '';
+    const acceptLimit = config.accept_limit || 100;
+    const currentCount = config.current_accepted_count || 0;
 
-  if (currentCount >= acceptLimit) {
-    log('INFO', `🚫 Accept limit reached (${currentCount}/${acceptLimit}). Stopping auto mode.`);
-    db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-    if (broadcastFn) broadcastFn('status_update', { isRunning: false });
-    stopWorker();
-    return;
-  }
-
-  log('FETCH', '🔄 Starting lead fetch cycle…');
-  log('INFO', `Config — keywords:${keywords.length} countries:${countries.length} minQty:${minQty} replyEnabled:${replyEnabled}`);
-
-  let leads;
-  try {
-    leads = await fetchLeads(config.cookies, proxyUrl);
-  } catch (err) {
-    if (err.code === 'SESSION_EXPIRED') {
-      sessionExpired = true;
+    if (currentCount >= acceptLimit) {
+      log('INFO', `🚫 Accept limit reached (${currentCount}/${acceptLimit}). Stopping auto mode.`);
       db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-      log('ERROR', '⚠️ Session expired — auto mode stopped. Please re-upload cookies.');
-      if (broadcastFn) broadcastFn('session_expired', {});
+      if (broadcastFn) broadcastFn('status_update', { isRunning: false });
       stopWorker();
       return;
     }
-    log('ERROR', `❌ Fetch failed: ${err.message}`);
-    if (broadcastFn) broadcastFn('cycle_done', { accepted: 0, skipped: 0, total: 0, error: err.message });
-    return;
-  }
 
-  log('INFO', `📥 Fetched ${leads.length} leads from IndiaMART`);
-  if (leads.length > 0) {
-    log('INFO', `🆕 Most recent lead found: ${leads[0].customer_name}`);
-  }
-  
-  // ── SORT BY TIMESTAMP (Newest first)
-  leads.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    log('FETCH', '🔄 Starting lead fetch cycle…');
 
-  if (leads.length === 0) {
-    log('INFO', 'No leads in response (check cookies/session or no new leads available)');
-  }
-
-  let accepted = 0, skipped = 0;
-
-  for (const lead of leads) {
-    // Brief human-like delay between each lead
-    await randomDelay(300, 1200);
-
-    // ── Duplicate check
-    const existing = db.prepare('SELECT id, replied FROM leads WHERE lead_id = ?').get(lead.lead_id);
-    if (existing) {
-      if (!existing.replied) {
-        // Already in DB but not replied — try again
-      } else {
-        continue; // fully done
-      }
-    }
-
-    // ── Skip conditions
-    if (isEmpty(lead)) {
-      db.prepare(`INSERT OR IGNORE INTO leads (lead_id,customer_name,company_name,product,country,mobile,email,quantity,message,timestamp,status,reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Empty inquiry');
-      skipped++; continue;
-    }
-    if (isSpam(lead)) {
-      db.prepare(`INSERT OR IGNORE INTO leads (lead_id,customer_name,company_name,product,country,mobile,email,quantity,message,timestamp,status,reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Spam detected');
-      skipped++; continue;
-    }
-
-    // ── Keyword filter
-    let keywordMatch = keywords.length === 0;
-    if (!keywordMatch) {
-      const text = `${lead.product} ${lead.message}`.toLowerCase();
-      keywordMatch = keywords.some(kw => text.includes(kw));
-    }
-
-    // ── Country filter
-    let countryMatch = countries.length === 0;
-    if (!countryMatch) {
-      const nc = normaliseCountry(lead.country);
-      countryMatch = countries.some(c => nc.includes(c) || lead.country.toLowerCase().includes(c));
-    }
-
-    // ── Quantity filter
-    const qtyMatch = minQty === 0 || lead.quantity >= minQty;
-
-    const isAccepted = keywordMatch && countryMatch && qtyMatch;
-
-    let reason = 'Matched';
-    if (!isAccepted) {
-      const reasons = [];
-      if (!keywordMatch) reasons.push('Keyword mismatch');
-      if (!countryMatch) reasons.push('Country mismatch');
-      if (!qtyMatch)     reasons.push(`Qty ${lead.quantity} < ${minQty}`);
-      reason = reasons.join('; ');
-    }
-
-    const status = isAccepted ? 'Accepted' : 'Skipped';
-
-    // Insert/update lead in DB
-    db.prepare(`
-      INSERT INTO leads (lead_id,customer_name,company_name,product,country,mobile,email,quantity,message,timestamp,status,reason,replied)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)
-      ON CONFLICT(lead_id) DO UPDATE SET status=excluded.status, reason=excluded.reason
-    `).run(
-      lead.lead_id, lead.customer_name, lead.company_name, lead.product,
-      lead.country, lead.mobile, lead.email, lead.quantity, lead.message,
-      new Date().toISOString(), status, reason
-    );
-
-    if (isAccepted) {
-      accepted++;
-      db.prepare('UPDATE config SET current_accepted_count = current_accepted_count + 1 WHERE id = 1').run();
-      
-      log('ACCEPT', `✅ Accepted: ${lead.customer_name} | ${lead.product} | ${lead.country}`);
-      
-      // Check limit again after incrementing
-      const check = db.prepare('SELECT current_accepted_count, accept_limit FROM config WHERE id = 1').get();
-      if (check.current_accepted_count >= check.accept_limit) {
-        log('INFO', `🚫 Accept limit reached (${check.current_accepted_count}/${check.accept_limit}). Stopping immediately.`);
+    let leads;
+    try {
+      leads = await fetchLeads(config.cookies, proxyUrl);
+    } catch (err) {
+      if (err.code === 'SESSION_EXPIRED') {
+        sessionExpired = true;
         db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-        if (broadcastFn) broadcastFn('status_update', { isRunning: false });
+        log('ERROR', '⚠️ Session expired — auto mode stopped. Please re-upload cookies.');
+        if (broadcastFn) broadcastFn('session_expired', {});
         stopWorker();
-        break; 
+        isProcessing = false;
+        return;
       }
+      log('ERROR', `❌ Fetch failed: ${err.message}`);
+      if (broadcastFn) broadcastFn('cycle_done', { accepted: 0, skipped: 0, total: 0, error: err.message });
+      isProcessing = false;
+      return;
+    }
 
-      // ── Auto reply
-      if (replyEnabled) {
-        await randomDelay(2000, 5000); // human-like delay before reply
-        try {
-          const msg = buildReplyMessage(replyMsg, lead);
-          await sendMessage(config.cookies, lead.lead_id, msg, proxyUrl);
-          db.prepare('UPDATE leads SET replied = 1 WHERE lead_id = ?').run(lead.lead_id);
-          log('REPLY', `💬 Replied to lead ${lead.lead_id}`);
-        } catch (e) {
-          log('ERROR', `Reply failed for ${lead.lead_id}: ${e.message}`);
+    log('INFO', `📥 Fetched ${leads.length} leads from IndiaMART`);
+
+    // Sort by timestamp (newest first)
+    leads.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    let accepted = 0, skipped = 0;
+
+    for (const lead of leads) {
+      await randomDelay(300, 1200);
+
+      // ── Duplicate check
+      const existing = db.prepare('SELECT id, replied FROM leads WHERE lead_id = ?').get(lead.lead_id);
+      if (existing) {
+        if (!existing.replied) {
+          // Try reply again if not replied
+        } else {
+          continue;
         }
       }
 
-      // ── Telegram notification
-      if (tgToken && tgChatId) {
-        await sendTelegramNotification(
-          tgToken, tgChatId,
-          `🎯 <b>New Lead Accepted!</b>\n👤 ${lead.customer_name}\n🏢 ${lead.company_name}\n📦 ${lead.product}\n🌍 ${lead.country}\n📞 ${lead.mobile || 'N/A'}`
-        );
+      // ── AI Scoring — runs on every lead regardless of filters
+      const { score, priority } = scoreLead(lead);
+      const medicines = extractMedicineNames(`${lead.product || ''} ${lead.message || ''}`);
+      const tags = extractTags(lead);
+      const medicineStr = medicines.join(', ');
+
+      // ── Skip conditions
+      if (isEmpty(lead)) {
+        db.prepare(`INSERT OR IGNORE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
+          .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Empty inquiry', score, priority, JSON.stringify(tags));
+        skipped++; continue;
+      }
+      if (isSpam(lead)) {
+        db.prepare(`INSERT OR IGNORE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
+          .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Spam detected', score, priority, JSON.stringify(tags));
+        skipped++; continue;
       }
 
-      // Broadcast to SSE clients
-      if (broadcastFn) broadcastFn('lead_accepted', lead);
-    } else {
-      skipped++;
-      log('SKIP', `⏭️ Skipped: ${lead.customer_name} | ${reason}`);
-    }
-  }
+      // ── Keyword filter
+      let keywordMatch = keywords.length === 0;
+      if (!keywordMatch) {
+        const text = `${lead.product} ${lead.message}`.toLowerCase();
+        keywordMatch = keywords.some(kw => text.includes(kw));
+      }
 
-  log('INFO', `✔️ Cycle done — Accepted: ${accepted}, Skipped: ${skipped}`);
-  if (broadcastFn) broadcastFn('cycle_done', { accepted, skipped, total: leads.length });
+      // ── Country filter
+      let countryMatch = countries.length === 0;
+      if (!countryMatch) {
+        const nc = normaliseCountry(lead.country);
+        countryMatch = countries.some(c => nc.includes(c) || lead.country.toLowerCase().includes(c));
+      }
+
+      // ── Quantity filter
+      const qtyMatch = minQty === 0 || lead.quantity >= minQty;
+
+      const isAccepted = keywordMatch && countryMatch && qtyMatch;
+
+      let reason = 'Matched';
+      if (!isAccepted) {
+        const reasons = [];
+        if (!keywordMatch) reasons.push('Keyword mismatch');
+        if (!countryMatch) reasons.push('Country mismatch');
+        if (!qtyMatch)     reasons.push(`Qty ${lead.quantity} < ${minQty}`);
+        reason = reasons.join('; ');
+      }
+
+      const status = isAccepted ? 'Accepted' : 'Skipped';
+
+      // Insert/update lead in DB with AI scoring data
+      db.prepare(`
+        INSERT INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,call_details,timestamp,status,reason,replied,ai_score,priority,tags)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)
+        ON CONFLICT(lead_id) DO UPDATE SET
+          status=excluded.status, reason=excluded.reason,
+          ai_score=excluded.ai_score, priority=excluded.priority,
+          tags=excluded.tags, medicine_name=excluded.medicine_name
+      `).run(
+        lead.lead_id, lead.customer_name, lead.company_name, lead.product,
+        medicineStr, lead.country, lead.mobile, lead.email, lead.quantity,
+        lead.message, lead.call_details || '', new Date().toISOString(),
+        status, reason, score, priority, JSON.stringify(tags)
+      );
+
+      if (isAccepted) {
+        accepted++;
+        db.prepare('UPDATE config SET current_accepted_count = current_accepted_count + 1 WHERE id = 1').run();
+
+        const priorityEmoji = priority === 'High' ? '🔥' : priority === 'Medium' ? '⭐' : '';
+        log('ACCEPT', `✅ ${priorityEmoji} Accepted [Score:${score}]: ${lead.customer_name} | ${lead.product} | ${lead.country}`);
+
+        // Check limit
+        const check = db.prepare('SELECT current_accepted_count, accept_limit FROM config WHERE id = 1').get();
+        if (check.current_accepted_count >= check.accept_limit) {
+          log('INFO', `🚫 Accept limit reached. Stopping.`);
+          db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
+          if (broadcastFn) broadcastFn('status_update', { isRunning: false });
+          stopWorker();
+          break;
+        }
+
+        // ── Auto reply
+        if (replyEnabled) {
+          await randomDelay(2000, 5000);
+          try {
+            const msg = buildReplyMessage(replyMsg, lead);
+            await sendMessage(config.cookies, lead.lead_id, msg, proxyUrl);
+            db.prepare('UPDATE leads SET replied = 1 WHERE lead_id = ?').run(lead.lead_id);
+            log('REPLY', `💬 Replied to lead ${lead.lead_id}`);
+          } catch (e) {
+            log('ERROR', `Reply failed for ${lead.lead_id}: ${e.message}`);
+          }
+        }
+
+        // ── Telegram notification (with priority + AI score)
+        if (tgToken && tgChatId) {
+          const priorityLabel = priority === 'High' ? '🔥 HIGH PRIORITY' : priority === 'Medium' ? '⭐ Medium' : 'Low';
+          await sendTelegramNotification(
+            tgToken, tgChatId,
+            `🎯 <b>New Lead Accepted!</b>\n${priorityLabel} | Score: ${score}/100\n👤 ${lead.customer_name}\n🏢 ${lead.company_name}\n💊 ${medicineStr || lead.product}\n🌍 ${lead.country}\n📞 ${lead.mobile || 'N/A'}\n📦 Qty: ${lead.quantity || 'N/A'}`
+          );
+        }
+
+        // Broadcast to SSE clients
+        if (broadcastFn) {
+          broadcastFn('lead_accepted', { ...lead, ai_score: score, priority, medicine_name: medicineStr, tags });
+          // Extra broadcast for high-priority leads
+          if (priority === 'High') {
+            broadcastFn('priority_lead', { ...lead, ai_score: score, priority, medicine_name: medicineStr });
+          }
+        }
+      } else {
+        skipped++;
+        log('SKIP', `⏭️ Skipped [Score:${score}]: ${lead.customer_name} | ${reason}`);
+      }
+    }
+
+    log('INFO', `✔️ Cycle done — Accepted: ${accepted}, Skipped: ${skipped}`);
+    if (broadcastFn) broadcastFn('cycle_done', { accepted, skipped, total: leads.length });
     isProcessing = false;
+
   } catch (err) {
     log('ERROR', `Critical worker error: ${err.message}`);
     isProcessing = false;
@@ -252,7 +265,8 @@ async function runCycle() {
       COUNT(*) as total,
       SUM(CASE WHEN status='Accepted' THEN 1 ELSE 0 END) as accepted,
       SUM(CASE WHEN status='Skipped'  THEN 1 ELSE 0 END) as skipped,
-      SUM(replied) as replied
+      SUM(replied) as replied,
+      SUM(CASE WHEN priority='High' THEN 1 ELSE 0 END) as high_priority
     FROM leads
   `).get();
   if (broadcastFn) broadcastFn('stats', stats);
@@ -268,7 +282,7 @@ function startWorker(broadcast) {
   const intervalMs = Math.max(10, config?.interval || 30) * 1000;
 
   log('INFO', `🚀 Auto mode started — interval ${intervalMs / 1000}s`);
-  runCycle(); // immediate first run
+  runCycle();
   workerTimer = setInterval(runCycle, intervalMs);
 }
 

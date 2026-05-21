@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  leadmed-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: leadmed-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    volumes:
+      # Persist the SQLite database outside the container
+      - ./backend/indiamart.db:/app/backend/indiamart.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "com.leadmed.service=backend"
+      - "com.leadmed.version=2.0"
+
+  # Optional: Nginx reverse proxy for production
+  # Uncomment below if you want to serve on port 80/443
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: leadmed-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - leadmed-backend
+  #   restart: unless-stopped

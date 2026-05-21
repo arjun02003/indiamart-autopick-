@@ -130,15 +130,13 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
   const MAX_PAGES  = 20;   // safety cap — fetch at most 1000 leads
   const allLeads   = [];
 
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const start = page * PAGE_SIZE;
-
+  for (let page = 1; page <= MAX_PAGES; page++) {
     // eslint-disable-next-line no-await-in-loop
     const pageLeads = await withRetry(async () => {
       const response = await axios.post(
         CONTACT_LIST_URL,
         {
-          start,
+          page,
           limit : PAGE_SIZE,
           modid : 'ALL',
           folder: 'ALL',
@@ -173,8 +171,7 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
         (Array.isArray(data) ? data : null);
 
       if (!leads) {
-        // Only throw on first page; later pages may just return empty
-        if (page === 0) {
+        if (page === 1) {
           throw new Error(
             `Unknown response shape. Top-level keys: ${Object.keys(data).join(', ')} | Sample: ${JSON.stringify(data).slice(0, 300)}`
           );
@@ -183,7 +180,7 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
       }
 
       if (!Array.isArray(leads)) {
-        if (page === 0) throw new Error(`"leads" field is not an array: ${JSON.stringify(leads).slice(0, 200)}`);
+        if (page === 1) throw new Error(`"leads" field is not an array: ${JSON.stringify(leads).slice(0, 200)}`);
         return [];
       }
 
@@ -191,14 +188,13 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
     });
 
     if (pageLeads.length === 0) {
-      console.log(`[IndiaMART] Page ${page + 1}: no more leads — stopping pagination.`);
+      console.log(`[IndiaMART] Page ${page}: no leads – stopping pagination.`);
       break;
     }
 
-    console.log(`[IndiaMART] Page ${page + 1} (start=${start}): fetched ${pageLeads.length} leads.`);
+    console.log(`[IndiaMART] Page ${page}: fetched ${pageLeads.length} leads.`);
     allLeads.push(...pageLeads.map(normalizeLead));
 
-    // If we got fewer than PAGE_SIZE, there are no more pages
     if (pageLeads.length < PAGE_SIZE) break;
 
     // Small polite delay between pages so IndiaMART doesn't rate-limit us
