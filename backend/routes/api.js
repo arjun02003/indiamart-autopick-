@@ -487,7 +487,8 @@ router.post('/telegram/test', async (req, res) => {
 
 router.delete('/leads', (_req, res) => {
   db.prepare('DELETE FROM leads').run();
-  res.json({ success: true, message: 'All leads cleared' });
+  db.prepare('UPDATE config SET current_accepted_count = 0 WHERE id = 1').run();
+  res.json({ success: true, message: 'All leads cleared and counter reset' });
 });
 
 module.exports = router;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
-import { getLeads, acceptLead, skipLead, exportLeads, removeDuplicates, rescoreLeads } from '../services/api';
+import { getLeads, acceptLead, skipLead, exportLeads, removeDuplicates, rescoreLeads, clearLeads } from '../services/api';
 import { useLeadSystem } from '../context/LeadContext';
 
 const STATUS_COLORS = {
@@ -84,6 +84,19 @@ export default function Leads() {
     finally { setRemoving(false); }
   };
 
+  const handleClearLeads = async () => {
+    if (!window.confirm('⚠️ Are you sure you want to delete all leads from the database? This cannot be undone.')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await clearLeads();
+      addNotification('success', 'All leads cleared & counter reset');
+      fetchLeads(); refreshStats();
+    } catch (e) { addNotification('error', e.message); }
+    finally { setLoading(false); }
+  };
+
   const handleRescore = async () => {
     try {
       const r = await rescoreLeads();
@@ -129,6 +142,7 @@ export default function Leads() {
           <button className="btn btn-outline btn-sm" onClick={() => exportLeads('csv',   filter, priority)}>⬇ CSV</button>
           <button className="btn btn-outline btn-sm" onClick={() => exportLeads('excel', filter, priority)}>⬇ Excel</button>
           <button className="btn btn-outline btn-sm" onClick={() => exportLeads('json',  filter, priority)}>⬇ JSON</button>
+          <button className="btn btn-danger btn-sm" onClick={handleClearLeads} title="Delete all leads from database">🗑️ Clear Leads</button>
         </div>
       </div>
 
