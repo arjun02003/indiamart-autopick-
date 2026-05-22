@@ -39,7 +39,7 @@ export default function Leads() {
   const [loading,  setLoading]  = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [removing, setRemoving] = useState(false);
-  const LIMIT = 100;
+  const LIMIT = 25;
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
