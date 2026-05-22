@@ -134,9 +134,9 @@ async function runCycle() {
         email        : String(rawLead.email || ''),
       };
 
-      // Skip leads already replied to — no delay needed
-      const existing = db.prepare('SELECT id, replied FROM leads WHERE lead_id = ?').get(lead.lead_id);
-      if (existing && existing.replied) continue;
+      // Skip leads already in the database to prevent duplicate counts/processing
+      const existing = db.prepare('SELECT id, status, replied FROM leads WHERE lead_id = ?').get(lead.lead_id);
+      if (existing) continue;
 
       // ── AI Scoring — runs on every lead regardless of filters
       const { score, priority } = scoreLead(lead);

@@ -129,18 +129,24 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
   const PAGE_SIZE  = 50;   // IndiaMART hard-caps at 50 per response
   const MAX_PAGES  = 20;   // safety cap — fetch at most 1000 leads
   const allLeads   = [];
+  let lastContactDate = null;
 
   for (let page = 1; page <= MAX_PAGES; page++) {
     // eslint-disable-next-line no-await-in-loop
     const pageLeads = await withRetry(async () => {
+      const payload = {
+        page: 1, // Always page: 1 when using last_contact_date
+        limit : PAGE_SIZE,
+        modid : 'ALL',
+        folder: 'ALL',
+      };
+      if (lastContactDate) {
+        payload.last_contact_date = lastContactDate;
+      }
+
       const response = await axios.post(
         CONTACT_LIST_URL,
-        {
-          page,
-          limit : PAGE_SIZE,
-          modid : 'ALL',
-          folder: 'ALL',
-        },
+        payload,
         {
           headers: {
             ...DEFAULT_HEADERS,
@@ -195,6 +201,16 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
     allLeads.push(...pageLeads.map(normalizeLead));
 
     if (pageLeads.length < PAGE_SIZE) break;
+
+    const lastLead = pageLeads[pageLeads.length - 1];
+    const newLastContactDate = lastLead.last_contact_date;
+
+    // Check if the cursor didn't change to avoid infinite loop
+    if (newLastContactDate && lastContactDate === newLastContactDate) {
+      console.log(`[IndiaMART] Page ${page}: last_contact_date did not change (${newLastContactDate}) – stopping.`);
+      break;
+    }
+    lastContactDate = newLastContactDate;
 
     // Small polite delay between pages so IndiaMART doesn't rate-limit us
     // eslint-disable-next-line no-await-in-loop
@@ -255,13 +271,24 @@ async function fetchRecentLeads(cookiesRaw, proxyUrl = '') {
 
   const MAX_PAGES = 4; // 4 × 50 = 200 leads max
   const allLeads  = [];
+  let lastContactDate = null;
 
   for (let page = 1; page <= MAX_PAGES; page++) {
     // eslint-disable-next-line no-await-in-loop
     const pageLeads = await withRetry(async () => {
+      const payload = {
+        page: 1, // Always page 1 when using last_contact_date cursor
+        limit: 50,
+        modid: 'ALL',
+        folder: 'ALL'
+      };
+      if (lastContactDate) {
+        payload.last_contact_date = lastContactDate;
+      }
+
       const response = await axios.post(
         CONTACT_LIST_URL,
-        { page, limit: 50, modid: 'ALL', folder: 'ALL' },
+        payload,
         {
           headers: { ...DEFAULT_HEADERS, 'Cookie': cookieString, 'Content-Type': 'application/json' },
           proxy  : buildProxy(proxyUrl),
@@ -285,6 +312,20 @@ async function fetchRecentLeads(cookiesRaw, proxyUrl = '') {
     if (pageLeads.length === 0) break;
     allLeads.push(...pageLeads.map(normalizeLead));
     if (pageLeads.length < 50) break; // last page
+
+    const lastLead = pageLeads[pageLeads.length - 1];
+    const newLastContactDate = lastLead.last_contact_date;
+
+    // Check if the cursor didn't change to avoid infinite loop
+    if (newLastContactDate && lastContactDate === newLastContactDate) {
+      console.log(`[IndiaMART] fetchRecentLeads: last_contact_date did not change (${newLastContactDate}) – stopping.`);
+      break;
+    }
+    lastContactDate = newLastContactDate;
+
+    // Small polite delay between pages so IndiaMART doesn't rate-limit us
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(r => setTimeout(r, 800));
   }
 
   console.log(`[IndiaMART] Recent fetch: ${allLeads.length} leads`);

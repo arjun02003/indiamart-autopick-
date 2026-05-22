@@ -201,8 +201,8 @@ export default function Leads() {
                 const pc = PRIORITY_CONFIG[lead.priority] || PRIORITY_CONFIG.Low;
                 const tags = (() => { try { return JSON.parse(lead.tags || '[]'); } catch { return []; } })();
                 return (
-                  <>
-                    <tr key={lead.id} className={`lead-row ${lead.priority === 'High' ? 'priority-row' : ''}`} onClick={() => setExpanded(expanded === lead.id ? null : lead.id)}>
+                  <Fragment key={lead.id}>
+                    <tr className={`lead-row ${lead.priority === 'High' ? 'priority-row' : ''}`} onClick={() => setExpanded(expanded === lead.id ? null : lead.id)}>
                       <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {new Date(lead.timestamp).toLocaleDateString()}<br/>
                         <span style={{ fontSize: '0.7rem' }}>{new Date(lead.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -264,7 +264,7 @@ export default function Leads() {
                       </td>
                     </tr>
                     {expanded === lead.id && (
-                      <tr key={`${lead.id}-detail`} className="lead-detail-row">
+                      <tr className="lead-detail-row">
                         <td colSpan="10">
                           <div className="lead-detail">
                             <div><strong>Lead ID:</strong> {lead.lead_id}</div>
@@ -284,7 +284,7 @@ export default function Leads() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
