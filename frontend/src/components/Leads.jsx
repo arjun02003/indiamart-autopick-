@@ -36,6 +36,7 @@ export default function Leads() {
   const [medicine, setMedicine] = useState('');
   const [priority, setPriority] = useState('');
   const [minScore, setMinScore] = useState(0);
+  const [sort,     setSort]     = useState('newest');
   const [loading,  setLoading]  = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [removing, setRemoving] = useState(false);
@@ -44,7 +45,7 @@ export default function Leads() {
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getLeads({ page, limit: LIMIT, search, status: filter, country, medicine, priority, min_score: minScore });
+      const data = await getLeads({ page, limit: LIMIT, search, status: filter, country, medicine, priority, min_score: minScore, sort });
       setLeads(data.leads);
       setTotal(data.total);
     } catch (e) {
@@ -52,10 +53,10 @@ export default function Leads() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, filter, country, medicine, priority, minScore, addNotification]);
+  }, [page, search, filter, country, medicine, priority, minScore, sort, addNotification]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
-  useEffect(() => { setPage(1); }, [search, filter, country, medicine, priority, minScore]);
+  useEffect(() => { setPage(1); }, [search, filter, country, medicine, priority, minScore, sort]);
 
   const handleAccept = async (id) => {
     try {
@@ -156,6 +157,10 @@ export default function Leads() {
           <option value="High">🔥 High</option>
           <option value="Medium">⭐ Medium</option>
           <option value="Low">— Low</option>
+        </select>
+        <select id="lead-filter-sort" value={sort} onChange={e => setSort(e.target.value)}>
+          <option value="newest">📅 Newest First</option>
+          <option value="score">🎯 Score First</option>
         </select>
         <input
           type="text"

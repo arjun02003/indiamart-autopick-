@@ -179,6 +179,7 @@ router.get('/leads', (req, res) => {
     search = '', status = '',
     country = '', medicine = '',
     priority = '', min_score = 0,
+    sort = 'newest',
   } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -196,8 +197,13 @@ router.get('/leads', (req, res) => {
   if (priority) { where += ' AND priority = ?'; params.push(priority); }
   if (parseInt(min_score) > 0) { where += ' AND ai_score >= ?'; params.push(parseInt(min_score)); }
 
+  let orderBy = 'id DESC';
+  if (sort === 'score') {
+    orderBy = 'ai_score DESC, id DESC';
+  }
+
   const total = db.prepare(`SELECT COUNT(*) as cnt FROM leads ${where}`).get(...params).cnt;
-  const leads = db.prepare(`SELECT * FROM leads ${where} ORDER BY ai_score DESC, id DESC LIMIT ? OFFSET ?`)
+  const leads = db.prepare(`SELECT * FROM leads ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
                    .all(...params, parseInt(limit), offset);
 
   res.json({ success: true, leads, total, page: parseInt(page), limit: parseInt(limit) });
