@@ -140,7 +140,6 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
           limit : PAGE_SIZE,
           modid : 'ALL',
           folder: 'ALL',
-          flag  : 'RECENT',
         },
         {
           headers: {

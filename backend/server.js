@@ -8,6 +8,14 @@ const path = require('path');
 const db = require('./db');
 const worker = require('./worker');
 
+// ── Global crash protection — keep server alive on unhandled errors ──
+process.on('uncaughtException', (err) => {
+  console.error('[CRASH] Uncaught Exception (server kept alive):', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRASH] Unhandled Promise Rejection (server kept alive):', reason?.message || reason);
+});
+
 const app = express();
 
 // SSE client registry
