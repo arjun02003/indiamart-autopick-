@@ -127,6 +127,18 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const PORT = process.env.PORT || 3001;
+// Helper to delete leads and logs older than 30 days
+function runRetentionCleanup() {
+  try {
+    console.log('🧹 Running automated monthly retention cleanup...');
+    const leadsRes = db.prepare("DELETE FROM leads WHERE datetime(timestamp) < datetime('now', '-30 days')").run();
+    const logsRes = db.prepare("DELETE FROM logs WHERE datetime(timestamp) < datetime('now', '-30 days')").run();
+    console.log(`🧹 Auto-cleanup complete. Purged ${leadsRes.changes} old leads and ${logsRes.changes} old logs.`);
+  } catch (err) {
+    console.error('Failed to run automated retention cleanup:', err.message);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`✅ Backend running on http://localhost:${PORT}`);
 
@@ -137,6 +149,12 @@ app.listen(PORT, () => {
   } catch (err) {
     console.error('Failed to reset config running states on startup:', err.message);
   }
+
+  // Run cleanup once on startup
+  runRetentionCleanup();
+
+  // Run cleanup every 24 hours
+  setInterval(runRetentionCleanup, 24 * 60 * 60 * 1000);
 });
 
 module.exports = app;
