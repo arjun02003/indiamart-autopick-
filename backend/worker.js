@@ -301,27 +301,48 @@ async function runCycle(userId) {
 }
 
 /* ── Worker control ────────────────────────────────────────────── */
+function scheduleNext(userId) {
+  if (!activeTimers.has(userId)) return;
+
+  const config = db.prepare('SELECT interval FROM config WHERE user_id = ?').get(userId);
+  const baseSeconds = Math.max(10, config?.interval || 30);
+  
+  // Calculate randomized delay: fluctuation of +/- 15% (jitter)
+  const jitterRange = baseSeconds * 0.15;
+  const randomJitter = (Math.random() * 2 - 1) * jitterRange;
+  const delayMs = Math.round((baseSeconds + randomJitter) * 1000);
+
+  const timer = setTimeout(async () => {
+    await runCycle(userId);
+    scheduleNext(userId);
+  }, delayMs);
+
+  activeTimers.set(userId, timer);
+}
+
 function startWorker(userId, broadcast) {
   if (activeTimers.has(userId)) return;
   if (broadcast) broadcastFn = broadcast;
 
   sessionExpiredUsers.delete(userId);
+  
   const config = db.prepare('SELECT interval FROM config WHERE user_id = ?').get(userId);
-  const intervalMs = Math.max(10, config?.interval || 30) * 1000;
+  const baseSeconds = Math.max(10, config?.interval || 30);
 
-  log(userId, 'INFO', `🚀 Auto mode started — interval ${intervalMs / 1000}s`);
+  log(userId, 'INFO', `🚀 Auto mode started — interval ${baseSeconds}s (with randomized jitter)`);
   
   // Run cycle asynchronously
   runCycle(userId);
   
-  const timer = setInterval(() => runCycle(userId), intervalMs);
-  activeTimers.set(userId, timer);
+  // Place holder and start loop
+  activeTimers.set(userId, null);
+  scheduleNext(userId);
 }
 
 function stopWorker(userId) {
   const timer = activeTimers.get(userId);
   if (timer) {
-    clearInterval(timer);
+    clearTimeout(timer);
     activeTimers.delete(userId);
     log(userId, 'INFO', '⛔ Auto mode stopped');
   }

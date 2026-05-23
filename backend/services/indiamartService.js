@@ -4,9 +4,22 @@ const BASE_URL           = 'https://seller.indiamart.com';
 const CONTACT_LIST_URL   = `${BASE_URL}/lmsreact/getContactList`;
 const SEND_MESSAGE_URL   = `${BASE_URL}/lmsreact/sendMessage`;
 
+// Modern user agents list for rotation
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:126.0) Gecko/20100101 Firefox/126.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0'
+];
+
+function getRandomUserAgent() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
 // ── Headers that mirror a real browser session ───────────────────────
 const DEFAULT_HEADERS = {
-  'User-Agent'     : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept'         : 'application/json, text/plain, */*',
   'Accept-Language': 'en-US,en;q=0.9',
   'Referer'        : 'https://seller.indiamart.com/leadmanager/',
@@ -150,6 +163,7 @@ async function fetchLeads(cookiesRaw, proxyUrl = '') {
         {
           headers: {
             ...DEFAULT_HEADERS,
+            'User-Agent'  : getRandomUserAgent(),
             'Cookie'      : cookieString,
             'Content-Type': 'application/json',
           },
@@ -236,6 +250,7 @@ async function sendMessage(cookiesRaw, leadId, messageText, proxyUrl = '') {
       {
         headers: {
           ...DEFAULT_HEADERS,
+          'User-Agent'  : getRandomUserAgent(),
           'Cookie'      : cookieString,
           'Content-Type': 'application/json',
         },
@@ -290,7 +305,12 @@ async function fetchRecentLeads(cookiesRaw, proxyUrl = '') {
         CONTACT_LIST_URL,
         payload,
         {
-          headers: { ...DEFAULT_HEADERS, 'Cookie': cookieString, 'Content-Type': 'application/json' },
+          headers: { 
+            ...DEFAULT_HEADERS, 
+            'User-Agent': getRandomUserAgent(),
+            'Cookie': cookieString, 
+            'Content-Type': 'application/json' 
+          },
           proxy  : buildProxy(proxyUrl),
           timeout: 60000,
         }
