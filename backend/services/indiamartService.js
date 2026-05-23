@@ -262,14 +262,14 @@ async function sendMessage(cookiesRaw, leadId, messageText, proxyUrl = '') {
 module.exports = { fetchLeads, fetchRecentLeads, sendMessage, parseCookies };
 
 /* ── fetchRecentLeads ────────────────────────────────────────────────
-   Fetches up to 200 leads (4 pages × 50) for the worker cycle.
+   Fetches up to 600 leads (12 pages × 50) for the worker cycle.
    Stops early if a page returns < 50 leads (end of results).
 */
 async function fetchRecentLeads(cookiesRaw, proxyUrl = '') {
   const cookieString = parseCookies(cookiesRaw);
   if (!cookieString) throw new Error('No valid cookies provided');
 
-  const MAX_PAGES = 4; // 4 × 50 = 200 leads max
+  const MAX_PAGES = 12; // 12 × 50 = 600 leads max
   const allLeads  = [];
   let lastContactDate = null;
 

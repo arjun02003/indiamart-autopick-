@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getStats, getStatus, startAutoMode, stopAutoMode } from '../services/api';
+import { useAuth } from './AuthContext';
 
 /* ── Safe default — prevents null-destructure crashes on hot-reload ── */
 const DEFAULT_LEAD_CTX = {
@@ -13,6 +14,7 @@ const DEFAULT_LEAD_CTX = {
 const LeadContext = createContext(DEFAULT_LEAD_CTX);
 
 export function LeadProvider({ children }) {
+  const { isAuthenticated } = useAuth();
   const [stats,          setStats]          = useState(DEFAULT_LEAD_CTX.stats);
   const [isRunning,      setIsRunning]      = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -54,29 +56,35 @@ export function LeadProvider({ children }) {
 
   /* ── Poll stats / status ────────────────────────────────────────── */
   const refreshStats = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
       const s = await getStats();
       setStats(prev => ({ ...prev, ...s }));
     } catch (_) {}
-  }, []);
+  }, [isAuthenticated]);
 
   const refreshStatus = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
       const s = await getStatus();
       setIsRunning(s.running);
       // Only surface sessionExpired when worker is actively running
       if (!s.running) setSessionExpired(false);
     } catch (_) {}
-  }, []);
+  }, [isAuthenticated]);
 
   /* ── SSE connection ─────────────────────────────────────────────── */
   const connectSSE = useCallback(() => {
     if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
 
-    const url = import.meta.env.PROD
-      ? 'https://indiamart-autopick-1-5ayn.onrender.com/api/events'
-      : `http://${window.location.hostname}:3001/api/events`;
+    const token = localStorage.getItem('leadmed_token');
+    if (!token) return;
 
+    const base = import.meta.env.PROD
+      ? 'https://indiamart-autopick-1-5ayn.onrender.com'
+      : `http://${window.location.hostname}:3001`;
+
+    const url = `${base}/api/events?token=${token}`;
     const es = new EventSource(url);
 
     es.addEventListener('stats', e => {
@@ -137,11 +145,13 @@ export function LeadProvider({ children }) {
     es.onerror = () => {
       es.close();
       sseRef.current = null;
-      setTimeout(connectSSE, 5000); // reconnect after 5s
+      if (localStorage.getItem('leadmed_token')) {
+        setTimeout(connectSSE, 5000); // reconnect after 5s if still logged in
+      }
     };
 
     sseRef.current = es;
-  }, [refreshStats]); // stable — uses refs for startedThisSession & addNotification
+  }, [refreshStats]);
 
   /* ── Auto mode toggle ───────────────────────────────────────────── */
   const toggleAutoMode = useCallback(async () => {
@@ -178,14 +188,32 @@ export function LeadProvider({ children }) {
     }
   }, [refreshStats]);
 
-  /* ── Mount: init stats, status, SSE ────────────────────────────── */
+  /* ── Mount / Authentication connection lifecycle ─────────────────── */
   useEffect(() => {
+    if (!isAuthenticated) {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+      setIsRunning(false);
+      setSessionExpired(false);
+      setStats(DEFAULT_LEAD_CTX.stats);
+      return;
+    }
+
     refreshStats();
     refreshStatus();
     connectSSE();
+
     const t = setInterval(() => { refreshStats(); refreshStatus(); }, 5000);
-    return () => { clearInterval(t); sseRef.current?.close(); };
-  }, []); // run once on mount only — functions are stable via useCallback
+    return () => {
+      clearInterval(t);
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+    };
+  }, [isAuthenticated, refreshStats, refreshStatus, connectSSE]);
 
   return (
     <LeadContext.Provider value={{

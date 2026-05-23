@@ -3,6 +3,8 @@ import Dashboard   from './components/Dashboard';
 import Leads       from './components/Leads';
 import Settings    from './components/Settings';
 import ActivityLog from './components/ActivityLog';
+import Billing     from './components/Billing';
+import AdminPanel  from './components/AdminPanel';
 import Auth        from './components/Auth';
 import Layout      from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
@@ -26,6 +28,12 @@ function App() {
               <Route path="leads"    element={<Leads />} />
               <Route path="logs"     element={<ActivityLog />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="billing"  element={<Billing />} />
+              <Route path="admin"    element={
+                <PrivateRoute role="admin">
+                  <AdminPanel />
+                </PrivateRoute>
+              } />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

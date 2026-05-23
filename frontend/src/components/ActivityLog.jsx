@@ -21,7 +21,9 @@ export default function ActivityLog() {
   const fetchLogs = async () => {
     try {
       const data = await getLogs(300);
-      setLogs(data.reverse()); // newest last for auto-scroll
+      if (data && data.success && Array.isArray(data.logs)) {
+        setLogs([...data.logs].reverse()); // newest last for auto-scroll
+      }
     } catch (_) {}
   };
 

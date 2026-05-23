@@ -3,18 +3,24 @@ const { fetchRecentLeads, sendMessage } = require('./services/indiamartService')
 const { sendTelegramNotification } = require('./services/telegramService');
 const { scoreLead, extractMedicineNames, extractTags, isHighPriority } = require('./services/aiScoringService');
 
-let workerTimer    = null;
-let broadcastFn    = null;
-let sessionExpired = false;
-let isProcessing   = false;
+const activeTimers       = new Map(); // userId -> setInterval object
+const processingUsers    = new Set(); // userId
+const sessionExpiredUsers = new Set(); // userId
+let broadcastFn          = null;
 
 /* ── Logging ───────────────────────────────────────────────────── */
-function log(type, message) {
-  db.prepare('INSERT INTO logs (timestamp, message, type) VALUES (?, ?, ?)').run(
-    new Date().toISOString(), message, type
-  );
-  console.log(`[${type}] ${message}`);
-  if (broadcastFn) broadcastFn('log', { type, message, timestamp: new Date().toISOString() });
+function log(userId, type, message) {
+  try {
+    db.prepare('INSERT INTO logs (user_id, timestamp, message, type) VALUES (?, ?, ?, ?)').run(
+      userId, new Date().toISOString(), message, type
+    );
+  } catch (err) {
+    console.error(`[Worker Log Error] Failed to write log to database: ${err.message}`);
+  }
+  console.log(`[User ${userId}] [${type}] ${message}`);
+  if (broadcastFn) {
+    broadcastFn(userId, 'log', { type, message, timestamp: new Date().toISOString() });
+  }
 }
 
 /* ── Random human-like delay (3–12 s) ─────────────────────────── */
@@ -40,6 +46,7 @@ function isSpam(lead) {
   return spamKeywords.some(kw => text === kw);
 }
 
+// Check for empty lead
 function isEmpty(lead) {
   return !lead.product && !lead.message;
 }
@@ -54,23 +61,34 @@ function buildReplyMessage(template, lead) {
 }
 
 /* ── Main fetch + process cycle ────────────────────────────────── */
-async function runCycle() {
-  if (isProcessing) return;
-  isProcessing = true;
+async function runCycle(userId) {
+  if (processingUsers.has(userId)) return;
+  processingUsers.add(userId);
 
   try {
-    const config = db.prepare('SELECT * FROM config WHERE id = 1').get();
+    const config = db.prepare('SELECT * FROM config WHERE user_id = ?').get(userId);
     if (!config || config.is_running === 0) {
-      isProcessing = false;
+      processingUsers.delete(userId);
+      return;
+    }
+
+    // Verify subscription status
+    const user = db.prepare('SELECT subscription_status FROM users WHERE id = ?').get(userId);
+    if (!user || user.subscription_status !== 'active') {
+      log(userId, 'INFO', '🚫 Premium Subscription required to run Auto Mode. Stopping worker.');
+      db.prepare('UPDATE config SET is_running = 0 WHERE user_id = ?').run(userId);
+      if (broadcastFn) broadcastFn(userId, 'status_update', { isRunning: false });
+      stopWorker(userId);
+      processingUsers.delete(userId);
       return;
     }
 
     if (config.current_accepted_count >= config.accept_limit) {
-      log('INFO', `🚫 Limit hit (${config.current_accepted_count}/${config.accept_limit}). Stopping.`);
-      db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-      if (broadcastFn) broadcastFn('status_update', { isRunning: false });
-      stopWorker();
-      isProcessing = false;
+      log(userId, 'INFO', `🚫 Limit hit (${config.current_accepted_count}/${config.accept_limit}). Stopping.`);
+      db.prepare('UPDATE config SET is_running = 0 WHERE user_id = ?').run(userId);
+      if (broadcastFn) broadcastFn(userId, 'status_update', { isRunning: false });
+      stopWorker(userId);
+      processingUsers.delete(userId);
       return;
     }
 
@@ -82,39 +100,40 @@ async function runCycle() {
     const replyMsg   = config.auto_reply_msg || 'Thank you for your inquiry.';
     const tgToken    = config.telegram_token    || '';
     const tgChatId   = config.telegram_chat_id  || '';
-    const acceptLimit = config.accept_limit || 100;
+    const acceptLimit = config.accept_limit || 600;
     const currentCount = config.current_accepted_count || 0;
 
     if (currentCount >= acceptLimit) {
-      log('INFO', `🚫 Accept limit reached (${currentCount}/${acceptLimit}). Stopping auto mode.`);
-      db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-      if (broadcastFn) broadcastFn('status_update', { isRunning: false });
-      stopWorker();
+      log(userId, 'INFO', `🚫 Accept limit reached (${currentCount}/${acceptLimit}). Stopping auto mode.`);
+      db.prepare('UPDATE config SET is_running = 0 WHERE user_id = ?').run(userId);
+      if (broadcastFn) broadcastFn(userId, 'status_update', { isRunning: false });
+      stopWorker(userId);
+      processingUsers.delete(userId);
       return;
     }
 
-    log('FETCH', '🔄 Starting lead fetch cycle…');
+    log(userId, 'FETCH', '🔄 Starting lead fetch cycle…');
 
     let leads;
     try {
       leads = await fetchRecentLeads(config.cookies, proxyUrl);
     } catch (err) {
       if (err.code === 'SESSION_EXPIRED') {
-        sessionExpired = true;
-        db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-        log('ERROR', '⚠️ Session expired — auto mode stopped. Please re-upload cookies.');
-        if (broadcastFn) broadcastFn('session_expired', {});
-        stopWorker();
-        isProcessing = false;
+        sessionExpiredUsers.add(userId);
+        db.prepare('UPDATE config SET is_running = 0 WHERE user_id = ?').run(userId);
+        log(userId, 'ERROR', '⚠️ Session expired — auto mode stopped. Please re-upload cookies.');
+        if (broadcastFn) broadcastFn(userId, 'session_expired', {});
+        stopWorker(userId);
+        processingUsers.delete(userId);
         return;
       }
-      log('ERROR', `❌ Fetch failed: ${err.message}`);
-      if (broadcastFn) broadcastFn('cycle_done', { accepted: 0, skipped: 0, total: 0, error: err.message });
-      isProcessing = false;
+      log(userId, 'ERROR', `❌ Fetch failed: ${err.message}`);
+      if (broadcastFn) broadcastFn(userId, 'cycle_done', { accepted: 0, skipped: 0, total: 0, error: err.message });
+      processingUsers.delete(userId);
       return;
     }
 
-    log('INFO', `📥 Fetched ${leads.length} leads from IndiaMART`);
+    log(userId, 'INFO', `📥 Fetched ${leads.length} leads from IndiaMART`);
 
     // Sort by timestamp (newest first)
     leads.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -134,43 +153,43 @@ async function runCycle() {
         email        : String(rawLead.email || ''),
       };
 
-      // Skip leads already in the database to prevent duplicate counts/processing
-      const existing = db.prepare('SELECT id, status, replied FROM leads WHERE lead_id = ?').get(lead.lead_id);
+      // Skip leads already in the database for this specific user
+      const existing = db.prepare('SELECT id, status, replied FROM leads WHERE lead_id = ? AND user_id = ?').get(lead.lead_id, userId);
       if (existing) continue;
 
-      // ── AI Scoring — runs on every lead regardless of filters
+      // AI Scoring — runs on every lead
       const { score, priority } = scoreLead(lead);
       const medicines = extractMedicineNames(`${lead.product || ''} ${lead.message || ''}`);
       const tags = extractTags(lead);
       const medicineStr = medicines.join(', ');
 
-      // ── Skip conditions
+      // Skip conditions
       if (isEmpty(lead)) {
-        db.prepare(`INSERT OR REPLACE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
-          .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Empty inquiry', score, priority, JSON.stringify(tags));
+        db.prepare(`INSERT OR REPLACE INTO leads (user_id,lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
+          .run(userId, lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Empty inquiry', score, priority, JSON.stringify(tags));
         skipped++; continue;
       }
       if (isSpam(lead)) {
-        db.prepare(`INSERT OR REPLACE INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
-          .run(lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Spam detected', score, priority, JSON.stringify(tags));
+        db.prepare(`INSERT OR REPLACE INTO leads (user_id,lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,timestamp,status,reason,ai_score,priority,tags,replied) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
+          .run(userId, lead.lead_id, lead.customer_name, lead.company_name, lead.product, medicineStr, lead.country, lead.mobile, lead.email, lead.quantity, lead.message, new Date().toISOString(), 'Skipped', 'Spam detected', score, priority, JSON.stringify(tags));
         skipped++; continue;
       }
 
-      // ── Keyword filter
+      // Keyword filter
       let keywordMatch = keywords.length === 0;
       if (!keywordMatch) {
         const text = `${lead.product} ${lead.message}`.toLowerCase();
         keywordMatch = keywords.some(kw => text.includes(kw));
       }
 
-      // ── Country filter
+      // Country filter
       let countryMatch = countries.length === 0;
       if (!countryMatch) {
         const nc = normaliseCountry(lead.country);
         countryMatch = countries.some(c => nc.includes(c) || lead.country.toLowerCase().includes(c));
       }
 
-      // ── Quantity filter
+      // Quantity filter
       const qtyMatch = minQty === 0 || lead.quantity >= minQty;
 
       const isAccepted = keywordMatch && countryMatch && qtyMatch;
@@ -186,16 +205,16 @@ async function runCycle() {
 
       const status = isAccepted ? 'Accepted' : 'Skipped';
 
-      // Insert/update lead in DB with AI scoring data
+      // Insert/update lead in DB
       db.prepare(`
-        INSERT INTO leads (lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,call_details,timestamp,status,reason,replied,ai_score,priority,tags)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)
-        ON CONFLICT(lead_id) DO UPDATE SET
+        INSERT INTO leads (user_id,lead_id,customer_name,company_name,product,medicine_name,country,mobile,email,quantity,message,call_details,timestamp,status,reason,replied,ai_score,priority,tags)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)
+        ON CONFLICT(user_id, lead_id) DO UPDATE SET
           status=excluded.status, reason=excluded.reason,
           ai_score=excluded.ai_score, priority=excluded.priority,
           tags=excluded.tags, medicine_name=excluded.medicine_name
       `).run(
-        lead.lead_id, lead.customer_name, lead.company_name, lead.product,
+        userId, lead.lead_id, lead.customer_name, lead.company_name, lead.product,
         medicineStr, lead.country, lead.mobile, lead.email, lead.quantity,
         lead.message, lead.call_details || '', new Date().toISOString(),
         status, reason, score, priority, JSON.stringify(tags)
@@ -203,35 +222,35 @@ async function runCycle() {
 
       if (isAccepted) {
         accepted++;
-        db.prepare('UPDATE config SET current_accepted_count = current_accepted_count + 1 WHERE id = 1').run();
+        db.prepare('UPDATE config SET current_accepted_count = current_accepted_count + 1 WHERE user_id = ?').run(userId);
 
         const priorityEmoji = priority === 'High' ? '🔥' : priority === 'Medium' ? '⭐' : '';
-        log('ACCEPT', `✅ ${priorityEmoji} Accepted [Score:${score}]: ${lead.customer_name} | ${lead.product} | ${lead.country}`);
+        log(userId, 'ACCEPT', `✅ ${priorityEmoji} Accepted [Score:${score}]: ${lead.customer_name} | ${lead.product} | ${lead.country}`);
 
         // Check limit
-        const check = db.prepare('SELECT current_accepted_count, accept_limit FROM config WHERE id = 1').get();
+        const check = db.prepare('SELECT current_accepted_count, accept_limit FROM config WHERE user_id = ?').get(userId);
         if (check.current_accepted_count >= check.accept_limit) {
-          log('INFO', `🚫 Accept limit reached. Stopping.`);
-          db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-          if (broadcastFn) broadcastFn('status_update', { isRunning: false });
-          stopWorker();
+          log(userId, 'INFO', `🚫 Accept limit reached. Stopping.`);
+          db.prepare('UPDATE config SET is_running = 0 WHERE user_id = ?').run(userId);
+          if (broadcastFn) broadcastFn(userId, 'status_update', { isRunning: false });
+          stopWorker(userId);
           break;
         }
 
-        // ── Auto reply
+        // Auto reply
         if (replyEnabled) {
           await randomDelay(2000, 5000);
           try {
             const msg = buildReplyMessage(replyMsg, lead);
             await sendMessage(config.cookies, lead.lead_id, msg, proxyUrl);
-            db.prepare('UPDATE leads SET replied = 1 WHERE lead_id = ?').run(lead.lead_id);
-            log('REPLY', `💬 Replied to lead ${lead.lead_id}`);
+            db.prepare('UPDATE leads SET replied = 1 WHERE lead_id = ? AND user_id = ?').run(lead.lead_id, userId);
+            log(userId, 'REPLY', `💬 Replied to lead ${lead.lead_id}`);
           } catch (e) {
-            log('ERROR', `Reply failed for ${lead.lead_id}: ${e.message}`);
+            log(userId, 'ERROR', `Reply failed for ${lead.lead_id}: ${e.message}`);
           }
         }
 
-        // ── Telegram notification (with priority + AI score)
+        // Telegram notification (with priority + AI score)
         if (tgToken && tgChatId) {
           const priorityLabel = priority === 'High' ? '🔥 HIGH PRIORITY' : priority === 'Medium' ? '⭐ Medium' : 'Low';
           await sendTelegramNotification(
@@ -242,66 +261,76 @@ async function runCycle() {
 
         // Broadcast to SSE clients
         if (broadcastFn) {
-          broadcastFn('lead_accepted', { ...lead, ai_score: score, priority, medicine_name: medicineStr, tags });
+          broadcastFn(userId, 'lead_captured', { ...lead, ai_score: score, priority, medicine_name: medicineStr, tags });
           // Extra broadcast for high-priority leads
           if (priority === 'High') {
-            broadcastFn('priority_lead', { ...lead, ai_score: score, priority, medicine_name: medicineStr });
+            broadcastFn(userId, 'priority_lead', { ...lead, ai_score: score, priority, medicine_name: medicineStr });
           }
         }
       } else {
         skipped++;
-        log('SKIP', `⏭️ Skipped [Score:${score}]: ${lead.customer_name} | ${reason}`);
+        log(userId, 'SKIP', `⏭️ Skipped [Score:${score}]: ${lead.customer_name} | ${reason}`);
       }
     }
 
-    log('INFO', `✔️ Cycle done — Accepted: ${accepted}, Skipped: ${skipped}`);
-    if (broadcastFn) broadcastFn('cycle_done', { accepted, skipped, total: leads.length });
-    isProcessing = false;
+    log(userId, 'INFO', `✔️ Cycle done — Accepted: ${accepted}, Skipped: ${skipped}`);
+    if (broadcastFn) broadcastFn(userId, 'cycle_done', { accepted, skipped, total: leads.length });
+    processingUsers.delete(userId);
 
   } catch (err) {
-    log('ERROR', `Critical worker error: ${err.message}`);
-    isProcessing = false;
+    log(userId, 'ERROR', `Critical worker error: ${err.message}`);
+    processingUsers.delete(userId);
   }
 
   // Update DB stats cache
-  const stats = db.prepare(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN status='Accepted' THEN 1 ELSE 0 END) as accepted,
-      SUM(CASE WHEN status='Skipped'  THEN 1 ELSE 0 END) as skipped,
-      SUM(replied) as replied,
-      SUM(CASE WHEN priority='High' THEN 1 ELSE 0 END) as high_priority
-    FROM leads
-  `).get();
-  if (broadcastFn) broadcastFn('stats', stats);
+  try {
+    const stats = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status='Accepted' THEN 1 ELSE 0 END) as accepted,
+        SUM(CASE WHEN status='Skipped'  THEN 1 ELSE 0 END) as skipped,
+        SUM(replied) as replied,
+        SUM(CASE WHEN priority='High' THEN 1 ELSE 0 END) as high_priority
+      FROM leads
+      WHERE user_id = ?
+    `).get(userId);
+    if (broadcastFn) broadcastFn(userId, 'stats', stats);
+  } catch (err) {
+    console.error(`[Worker Stats Error] Failed to fetch stats for user ${userId}: ${err.message}`);
+  }
 }
 
 /* ── Worker control ────────────────────────────────────────────── */
-function startWorker(broadcast) {
-  if (workerTimer) return;
+function startWorker(userId, broadcast) {
+  if (activeTimers.has(userId)) return;
   if (broadcast) broadcastFn = broadcast;
 
-  sessionExpired = false;
-  const config    = db.prepare('SELECT interval FROM config WHERE id = 1').get();
+  sessionExpiredUsers.delete(userId);
+  const config = db.prepare('SELECT interval FROM config WHERE user_id = ?').get(userId);
   const intervalMs = Math.max(10, config?.interval || 30) * 1000;
 
-  log('INFO', `🚀 Auto mode started — interval ${intervalMs / 1000}s`);
-  runCycle();
-  workerTimer = setInterval(runCycle, intervalMs);
+  log(userId, 'INFO', `🚀 Auto mode started — interval ${intervalMs / 1000}s`);
+  
+  // Run cycle asynchronously
+  runCycle(userId);
+  
+  const timer = setInterval(() => runCycle(userId), intervalMs);
+  activeTimers.set(userId, timer);
 }
 
-function stopWorker() {
-  if (workerTimer) {
-    clearInterval(workerTimer);
-    workerTimer = null;
-    log('INFO', '⛔ Auto mode stopped');
+function stopWorker(userId) {
+  const timer = activeTimers.get(userId);
+  if (timer) {
+    clearInterval(timer);
+    activeTimers.delete(userId);
+    log(userId, 'INFO', '⛔ Auto mode stopped');
   }
-  isProcessing = false;
-  sessionExpired = false; // reset so banner clears on next start
+  processingUsers.delete(userId);
+  sessionExpiredUsers.delete(userId);
 }
 
-function isWorkerRunning() { return workerTimer !== null; }
-function isSessionExpiredState() { return sessionExpired; }
+function isWorkerRunning(userId) { return activeTimers.has(userId); }
+function isSessionExpiredState(userId) { return sessionExpiredUsers.has(userId); }
 function setBroadcast(fn) { broadcastFn = fn; }
 
 module.exports = { startWorker, stopWorker, isWorkerRunning, isSessionExpiredState, setBroadcast };

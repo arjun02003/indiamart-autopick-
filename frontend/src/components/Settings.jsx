@@ -77,6 +77,16 @@ export default function Settings() {
   const [cookiePaste, setCookiePaste] = useState('');
   const [tgTesting, setTgTesting] = useState(false);
   const [removing, setRemoving]   = useState(false);
+  const [copied, setCopied]       = useState(false);
+
+  const token = localStorage.getItem('leadmed_token') || '';
+
+  const handleCopyToken = () => {
+    navigator.clipboard.writeText(token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    addNotification('success', '📋 API Token copied to clipboard!');
+  };
 
   useEffect(() => {
     getConfig().then(c => {
@@ -277,7 +287,7 @@ export default function Settings() {
         <h3 className="section-title">🎯 Auto Accept Limit</h3>
         <p className="section-desc">Stop auto-accepting after reaching this limit. The counter persists until reset.</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <input type="number" min="1" value={cfg.accept_limit || 100} onChange={e => set('accept_limit', parseInt(e.target.value) || 1)} style={{ maxWidth: '160px' }} />
+          <input type="number" min="1" value={cfg.accept_limit || 600} onChange={e => set('accept_limit', parseInt(e.target.value) || 1)} style={{ maxWidth: '160px' }} />
           <span style={{ color: 'var(--text-muted)' }}>Leads per session</span>
         </div>
       </div>
@@ -337,12 +347,43 @@ export default function Settings() {
       <div className="glass-panel settings-section" style={{ borderLeft: '3px solid rgba(99,102,241,0.5)' }}>
         <h3 className="section-title">🔌 Chrome Extension</h3>
         <p className="section-desc">Install the Chrome Extension to capture leads directly from IndiaMART pages in real-time.</p>
+        
+        {token && (
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Your API Token / JWT</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input 
+                type="password" 
+                value={token} 
+                readOnly 
+                style={{ 
+                  fontFamily: 'monospace', 
+                  fontSize: '0.8rem', 
+                  background: 'rgba(10,15,30,0.6)', 
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  flex: 1 
+                }} 
+              />
+              <button 
+                className="btn btn-outline" 
+                onClick={handleCopyToken}
+                style={{ whiteSpace: 'nowrap', minWidth: '100px' }}
+              >
+                {copied ? 'Copied! ✓' : '📋 Copy Token'}
+              </button>
+            </div>
+            <p className="section-desc" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }}>
+              Paste this token into the extension popup under <strong>API Token</strong> to authorize background sync.
+            </p>
+          </div>
+        )}
+
         <div style={{ background: 'rgba(10,15,30,0.5)', padding: '1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
           1. Open Chrome → chrome://extensions<br/>
           2. Enable "Developer mode" (top right)<br/>
           3. Click "Load unpacked"<br/>
           4. Select the <strong style={{ color: 'var(--text-main)' }}>chrome-extension/</strong> folder<br/>
-          5. Pin the extension → Click icon → Set backend URL
+          5. Pin the extension → Click icon → Set backend URL & paste API Token
         </div>
       </div>
 

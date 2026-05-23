@@ -7,6 +7,10 @@ const { sendTelegramNotification } = require('../services/telegramService');
 const { sendMessage }  = require('../services/indiamartService');
 const { scoreLead, extractMedicineNames, extractTags } = require('../services/aiScoringService');
 const worker   = require('../worker');
+const { authenticateToken } = require('./auth');
+
+// Secure all API routes
+router.use(authenticateToken);
 
 /* ── Optional: xlsx for Excel export (graceful fallback) ─────────────── */
 let xlsx;
@@ -15,8 +19,8 @@ try { xlsx = require('xlsx'); } catch (_) { xlsx = null; }
 /* ═══════════════════════════════════════════════════════════════
    DEBUG — returns raw first lead + all keys
 ═══════════════════════════════════════════════════════════════ */
-router.get('/debug/raw-leads', async (_req, res) => {
-  const config = db.prepare('SELECT cookies FROM config WHERE id = 1').get();
+router.get('/debug/raw-leads', async (req, res) => {
+  const config = db.prepare('SELECT cookies FROM config WHERE user_id = ?').get(req.user.id);
   const cookieString = parseCookies(config?.cookies || '');
   if (!cookieString) return res.status(400).json({ error: 'No cookies saved yet' });
 
@@ -59,8 +63,8 @@ router.get('/debug/raw-leads', async (_req, res) => {
    CONFIG
 ═══════════════════════════════════════════════════════════════ */
 
-router.get('/config', (_req, res) => {
-  const config = db.prepare('SELECT * FROM config WHERE id = 1').get();
+router.get('/config', (req, res) => {
+  const config = db.prepare('SELECT * FROM config WHERE user_id = ?').get(req.user.id);
   res.json({ success: true, config });
 });
 
@@ -86,7 +90,7 @@ router.post('/config', (req, res) => {
       min_quantity     = COALESCE(?, min_quantity),
       reply_enabled    = COALESCE(?, reply_enabled),
       accept_limit     = COALESCE(?, accept_limit)
-    WHERE id = 1
+    WHERE user_id = ?
   `).run(
     keywords   != null ? JSON.stringify(keywords) : null,
     countries  != null ? JSON.stringify(countries) : null,
@@ -100,6 +104,7 @@ router.post('/config', (req, res) => {
     min_quantity     != null ? min_quantity : null,
     reply_enabled    != null ? (reply_enabled ? 1 : 0) : null,
     accept_limit     != null ? accept_limit : null,
+    req.user.id
   );
 
   res.json({ success: true, message: 'Config saved' });
@@ -117,7 +122,7 @@ router.post('/upload-cookies', (req, res) => {
   if (!cookieStr) return res.status(400).json({ error: 'Invalid cookie format' });
 
   const raw = typeof cookies === 'string' ? cookies : JSON.stringify(cookies);
-  db.prepare('UPDATE config SET cookies = ? WHERE id = 1').run(raw);
+  db.prepare('UPDATE config SET cookies = ? WHERE user_id = ?').run(raw, req.user.id);
   res.json({ success: true, message: 'Cookies saved', preview: cookieStr.slice(0, 80) + '…' });
 });
 
@@ -130,7 +135,7 @@ router.post('/login-cookies', (req, res) => {
   if (!cookieStr) return res.status(400).json({ error: 'Invalid cookie format' });
 
   const raw = typeof cookies === 'string' ? cookies : JSON.stringify(cookies);
-  db.prepare('UPDATE config SET cookies = ? WHERE id = 1').run(raw);
+  db.prepare('UPDATE config SET cookies = ? WHERE user_id = ?').run(raw, req.user.id);
   res.json({ success: true, message: 'Cookies saved from Chrome Extension', preview: cookieStr.slice(0, 80) + '…' });
 });
 
@@ -139,32 +144,38 @@ router.post('/login-cookies', (req, res) => {
 ═══════════════════════════════════════════════════════════════ */
 
 router.post('/start', (req, res) => {
+  // Check subscription status
+  const user = db.prepare('SELECT subscription_status FROM users WHERE id = ?').get(req.user.id);
+  if (!user || user.subscription_status !== 'active') {
+    return res.status(403).json({ success: false, message: 'Premium Subscription required to run Auto Mode.' });
+  }
+
   // Guard: already running
-  if (worker.isWorkerRunning()) {
+  if (worker.isWorkerRunning(req.user.id)) {
     return res.json({ success: true, message: 'Already running' });
   }
   // Guard: no cookies saved
-  const cfg = db.prepare('SELECT cookies FROM config WHERE id = 1').get();
+  const cfg = db.prepare('SELECT cookies FROM config WHERE user_id = ?').get(req.user.id);
   const hasCookies = cfg && cfg.cookies && cfg.cookies.length > 10 && cfg.cookies !== '[]';
   if (!hasCookies) {
     return res.status(400).json({ success: false, message: 'No cookies found. Please upload IndiaMART cookies in Settings first.' });
   }
   const app = req.app;
-  db.prepare('UPDATE config SET is_running = 1 WHERE id = 1').run();
-  worker.startWorker(app.locals.broadcast);
+  db.prepare('UPDATE config SET is_running = 1 WHERE user_id = ?').run(req.user.id);
+  worker.startWorker(req.user.id, app.locals.broadcast);
   res.json({ success: true, message: 'Auto mode started' });
 });
 
-router.post('/stop', (_req, res) => {
-  db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-  worker.stopWorker();
+router.post('/stop', (req, res) => {
+  db.prepare('UPDATE config SET is_running = 0 WHERE user_id = ?').run(req.user.id);
+  worker.stopWorker(req.user.id);
   res.json({ success: true, message: 'Auto mode stopped' });
 });
 
-router.get('/status', (_req, res) => {
+router.get('/status', (req, res) => {
   res.json({
-    running        : worker.isWorkerRunning(),
-    sessionExpired : worker.isSessionExpiredState(),
+    running        : worker.isWorkerRunning(req.user.id),
+    sessionExpired : worker.isSessionExpiredState(req.user.id),
   });
 });
 
@@ -183,8 +194,8 @@ router.get('/leads', (req, res) => {
   } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
-  let where   = 'WHERE 1=1';
-  const params = [];
+  let where   = 'WHERE user_id = ?';
+  const params = [req.user.id];
 
   if (search) {
     where += ' AND (customer_name LIKE ? OR company_name LIKE ? OR product LIKE ? OR country LIKE ? OR mobile LIKE ? OR medicine_name LIKE ?)';
@@ -210,7 +221,7 @@ router.get('/leads', (req, res) => {
 });
 
 // GET stats
-router.get('/stats', (_req, res) => {
+router.get('/stats', (req, res) => {
   const stats = db.prepare(`
     SELECT
       COUNT(*) as total,
@@ -220,23 +231,24 @@ router.get('/stats', (_req, res) => {
       SUM(CASE WHEN priority='High' THEN 1 ELSE 0 END) as high_priority,
       AVG(ai_score) as avg_score
     FROM leads
-  `).get();
+    WHERE user_id = ?
+  `).get(req.user.id);
 
-  const config = db.prepare('SELECT accept_limit, current_accepted_count FROM config WHERE id = 1').get();
+  const config = db.prepare('SELECT accept_limit, current_accepted_count FROM config WHERE user_id = ?').get(req.user.id);
 
   // Top countries
   const topCountries = db.prepare(`
     SELECT country, COUNT(*) as count FROM leads
-    WHERE country IS NOT NULL AND country != '' AND country != 'Unknown'
+    WHERE user_id = ? AND country IS NOT NULL AND country != '' AND country != 'Unknown'
     GROUP BY country ORDER BY count DESC LIMIT 5
-  `).all();
+  `).all(req.user.id);
 
   // Top medicines
   const topMedicines = db.prepare(`
     SELECT medicine_name, COUNT(*) as count FROM leads
-    WHERE medicine_name IS NOT NULL AND medicine_name != ''
+    WHERE user_id = ? AND medicine_name IS NOT NULL AND medicine_name != ''
     GROUP BY medicine_name ORDER BY count DESC LIMIT 5
-  `).all();
+  `).all(req.user.id);
 
   res.json({
     success: true,
@@ -244,8 +256,8 @@ router.get('/stats', (_req, res) => {
       ...stats,
       high_priority: stats.high_priority || 0,
       avg_score: Math.round(stats.avg_score || 0),
-      limit: config.accept_limit,
-      current: config.current_accepted_count,
+      limit: config ? config.accept_limit : 600,
+      current: config ? config.current_accepted_count : 0,
     },
     topCountries,
     topMedicines,
@@ -256,35 +268,35 @@ router.get('/stats', (_req, res) => {
 router.get('/leads/priority', (req, res) => {
   const { limit = 20 } = req.query;
   const leads = db.prepare(`
-    SELECT * FROM leads WHERE priority = 'High' AND status = 'Accepted'
+    SELECT * FROM leads WHERE user_id = ? AND priority = 'High' AND status = 'Accepted'
     ORDER BY ai_score DESC, id DESC LIMIT ?
-  `).all(parseInt(limit));
+  `).all(req.user.id, parseInt(limit));
   res.json({ success: true, leads, total: leads.length });
 });
 
 // POST reset current accepted count
-router.post('/reset-counter', (_req, res) => {
-  db.prepare('UPDATE config SET current_accepted_count = 0 WHERE id = 1').run();
+router.post('/reset-counter', (req, res) => {
+  db.prepare('UPDATE config SET current_accepted_count = 0 WHERE user_id = ?').run(req.user.id);
   res.json({ success: true, message: 'Accepted counter reset' });
 });
 
 // POST manual accept a lead
 router.post('/leads/:id/accept', async (req, res) => {
   const { id } = req.params;
-  const config = db.prepare('SELECT * FROM config WHERE id = 1').get();
-  const lead   = db.prepare('SELECT * FROM leads WHERE id = ?').get(id);
+  const config = db.prepare('SELECT * FROM config WHERE user_id = ?').get(req.user.id);
+  const lead   = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(id, req.user.id);
 
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
-  db.prepare('UPDATE leads SET status = ?, reason = ? WHERE id = ?').run('Accepted', 'Manually accepted', id);
+  db.prepare('UPDATE leads SET status = ?, reason = ? WHERE id = ? AND user_id = ?').run('Accepted', 'Manually accepted', id, req.user.id);
 
-  if (config.reply_enabled && config.cookies) {
+  if (config && config.reply_enabled && config.cookies) {
     try {
       const replyMsg = (config.auto_reply_msg || 'Thank you for your inquiry.')
         .replace(/\{name\}/gi, lead.customer_name || '')
         .replace(/\{product\}/gi, lead.product || '');
       await sendMessage(config.cookies, lead.lead_id, replyMsg, config.proxy_url);
-      db.prepare('UPDATE leads SET replied = 1 WHERE id = ?').run(id);
+      db.prepare('UPDATE leads SET replied = 1 WHERE id = ? AND user_id = ?').run(id, req.user.id);
     } catch (e) {
       console.warn('[ManualAccept] Reply failed:', e.message);
     }
@@ -296,7 +308,7 @@ router.post('/leads/:id/accept', async (req, res) => {
 // POST manual skip a lead
 router.post('/leads/:id/skip', (req, res) => {
   const { id } = req.params;
-  db.prepare("UPDATE leads SET status = 'Skipped', reason = 'Manually skipped' WHERE id = ?").run(id);
+  db.prepare("UPDATE leads SET status = 'Skipped', reason = 'Manually skipped' WHERE id = ? AND user_id = ?").run(id, req.user.id);
   res.json({ success: true });
 });
 
@@ -305,7 +317,7 @@ router.post('/leads/:id/tag', (req, res) => {
   const { id } = req.params;
   const { tags } = req.body;
   if (!Array.isArray(tags)) return res.status(400).json({ error: 'tags must be an array' });
-  db.prepare('UPDATE leads SET tags = ? WHERE id = ?').run(JSON.stringify(tags), id);
+  db.prepare('UPDATE leads SET tags = ? WHERE id = ? AND user_id = ?').run(JSON.stringify(tags), id, req.user.id);
   res.json({ success: true, message: 'Tags updated' });
 });
 
@@ -320,13 +332,14 @@ router.post('/capture', (req, res) => {
 
   try {
     db.prepare(`
-      INSERT INTO leads (lead_id, customer_name, company_name, product, medicine_name, country, mobile, email, quantity, message, call_details, timestamp, status, reason, ai_score, priority, tags, replied)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 'Captured via Extension', ?, ?, ?, 0)
-      ON CONFLICT(lead_id) DO UPDATE SET
+      INSERT INTO leads (user_id, lead_id, customer_name, company_name, product, medicine_name, country, mobile, email, quantity, message, call_details, timestamp, status, reason, ai_score, priority, tags, replied)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 'Captured via Extension', ?, ?, ?, 0)
+      ON CONFLICT(user_id, lead_id) DO UPDATE SET
         ai_score = excluded.ai_score,
         priority = excluded.priority,
         tags = excluded.tags
     `).run(
+      req.user.id,
       lead.lead_id, lead.customer_name || 'Unknown', lead.company_name || '',
       lead.product || '', medicines.join(', '), lead.country || 'Unknown',
       lead.mobile || '', lead.email || '', lead.quantity || 0,
@@ -338,7 +351,7 @@ router.post('/capture', (req, res) => {
     // Broadcast SSE
     const app = req.app;
     if (app.locals.broadcast) {
-      app.locals.broadcast('lead_captured', { ...lead, ai_score: score, priority });
+      app.locals.broadcast(req.user.id, 'lead_captured', { ...lead, ai_score: score, priority });
     }
 
     res.json({ success: true, message: 'Lead captured', ai_score: score, priority });
@@ -349,15 +362,15 @@ router.post('/capture', (req, res) => {
 
 /* ── Re-score all leads ───────────────────────────────────────────────── */
 router.post('/leads/rescore', (req, res) => {
-  const leads = db.prepare('SELECT * FROM leads').all();
+  const leads = db.prepare('SELECT * FROM leads WHERE user_id = ?').all(req.user.id);
   let updated = 0;
-  const updateStmt = db.prepare('UPDATE leads SET ai_score = ?, priority = ?, tags = ?, medicine_name = ? WHERE id = ?');
+  const updateStmt = db.prepare('UPDATE leads SET ai_score = ?, priority = ?, tags = ?, medicine_name = ? WHERE id = ? AND user_id = ?');
 
   for (const lead of leads) {
     const { score, priority } = scoreLead(lead);
     const medicines = extractMedicineNames(`${lead.product || ''} ${lead.message || ''}`);
     const tags = extractTags(lead);
-    updateStmt.run(score, priority, JSON.stringify(tags), medicines.join(', '), lead.id);
+    updateStmt.run(score, priority, JSON.stringify(tags), medicines.join(', '), lead.id, req.user.id);
     updated++;
   }
 
@@ -374,24 +387,24 @@ router.delete('/leads/duplicates', (req, res) => {
   const duplicates = db.prepare(`
     SELECT MIN(id) as keep_id, mobile, product, COUNT(*) as cnt
     FROM leads
-    WHERE mobile != '' AND mobile IS NOT NULL
+    WHERE user_id = ? AND mobile != '' AND mobile IS NOT NULL
     GROUP BY mobile, product
     HAVING cnt > 1
-  `).all();
+  `).all(req.user.id);
 
   let removed = 0;
   for (const dup of duplicates) {
     // Keep the one with the highest AI score; delete the rest
     const toDelete = db.prepare(`
       SELECT id FROM leads
-      WHERE mobile = ? AND product = ? AND id != (
-        SELECT id FROM leads WHERE mobile = ? AND product = ?
+      WHERE user_id = ? AND mobile = ? AND product = ? AND id != (
+        SELECT id FROM leads WHERE user_id = ? AND mobile = ? AND product = ?
         ORDER BY ai_score DESC, id DESC LIMIT 1
       )
-    `).all(dup.mobile, dup.product, dup.mobile, dup.product);
+    `).all(req.user.id, dup.mobile, dup.product, req.user.id, dup.mobile, dup.product);
 
     for (const row of toDelete) {
-      db.prepare('DELETE FROM leads WHERE id = ?').run(row.id);
+      db.prepare('DELETE FROM leads WHERE id = ? AND user_id = ?').run(row.id, req.user.id);
       removed++;
     }
   }
@@ -405,7 +418,7 @@ router.delete('/leads/duplicates', (req, res) => {
 
 router.get('/export', (req, res) => {
   const { format = 'csv', status = '', priority = '' } = req.query;
-  let where = 'WHERE 1=1'; const params = [];
+  let where = 'WHERE user_id = ?'; const params = [req.user.id];
   if (status)   { where += ' AND status = ?';   params.push(status); }
   if (priority) { where += ' AND priority = ?'; params.push(priority); }
 
@@ -457,12 +470,12 @@ router.get('/export', (req, res) => {
 
 router.get('/logs', (req, res) => {
   const { limit = 200 } = req.query;
-  const logs = db.prepare('SELECT * FROM logs ORDER BY id DESC LIMIT ?').all(parseInt(limit));
+  const logs = db.prepare('SELECT * FROM logs WHERE user_id = ? ORDER BY id DESC LIMIT ?').all(req.user.id, parseInt(limit));
   res.json({ success: true, logs });
 });
 
-router.delete('/logs', (_req, res) => {
-  db.prepare('DELETE FROM logs').run();
+router.delete('/logs', (req, res) => {
+  db.prepare('DELETE FROM logs WHERE user_id = ?').run(req.user.id);
   res.json({ success: true, message: 'Logs cleared' });
 });
 
@@ -485,9 +498,9 @@ router.post('/telegram/test', async (req, res) => {
    CLEAR DATA
 ═══════════════════════════════════════════════════════════════ */
 
-router.delete('/leads', (_req, res) => {
-  db.prepare('DELETE FROM leads').run();
-  db.prepare('UPDATE config SET current_accepted_count = 0 WHERE id = 1').run();
+router.delete('/leads', (req, res) => {
+  db.prepare('DELETE FROM leads WHERE user_id = ?').run(req.user.id);
+  db.prepare('UPDATE config SET current_accepted_count = 0 WHERE user_id = ?').run(req.user.id);
   res.json({ success: true, message: 'All leads cleared and counter reset' });
 });
 

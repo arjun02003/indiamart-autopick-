@@ -50,6 +50,14 @@ export default function Layout() {
           <NavLink to="/settings"    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <span>⚙️</span> Settings
           </NavLink>
+          <NavLink to="/billing"     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <span>💳</span> Billing
+          </NavLink>
+          {user?.role === 'admin' && (
+            <NavLink to="/admin"     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <span>👥</span> Admin Panel
+            </NavLink>
+          )}
         </nav>
 
         <div style={{ marginTop: 'auto', padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

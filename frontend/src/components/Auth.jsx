@@ -3,12 +3,12 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function Auth() {
-  const [email,    setEmail]    = useState('admin@leadmed.com');
-  const [password, setPassword] = useState('admin123');
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
 
-  const { login, loginWithGoogle } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -19,15 +19,23 @@ export default function Auth() {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSkip = async () => {
-    await loginWithGoogle(); // auto-login as admin
-    navigate('/');
+    setError('');
+    setLoading(true);
+    try {
+      await login('admin@leadmed.local', 'admin123');
+      navigate('/');
+    } catch (err) {
+      setError(err.message || 'Quick access login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,6 +94,7 @@ export default function Auth() {
           </button>
         </form>
 
+
         <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', margin:'1.25rem 0' }}>
           <hr style={{ flex:1, border:'none', borderTop:'1px solid rgba(255,255,255,0.08)' }} />
           <span style={{ color:'var(--text-muted)', fontSize:'0.8rem' }}>OR</span>
@@ -93,12 +102,12 @@ export default function Auth() {
         </div>
 
         {/* One-click entry */}
-        <button onClick={handleSkip} className="btn btn-outline" style={{ width:'100%', padding:'0.75rem', justifyContent:'center' }}>
-          ⚡ Quick Access (Skip Login)
+        <button onClick={handleSkip} className="btn btn-outline" style={{ width:'100%', padding:'0.75rem', justifyContent:'center' }} disabled={loading}>
+          ⚡ Quick Access (Admin Login)
         </button>
 
         <p style={{ marginTop:'1.5rem', fontSize:'0.75rem', color:'var(--text-muted)' }}>
-          Default: any email + any password works
+          Default Admin: admin@leadmed.local / admin123
         </p>
       </div>
     </div>

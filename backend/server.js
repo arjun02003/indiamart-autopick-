@@ -7,6 +7,9 @@ const authRoutes = require('./routes/auth');
 const path = require('path');
 const db = require('./db');
 const worker = require('./worker');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.SESSION_SECRET || 'super-secret-jwt-key-9988';
 
 // ── Global crash protection — keep server alive on unhandled errors ──
 process.on('uncaughtException', (err) => {
@@ -18,8 +21,8 @@ process.on('unhandledRejection', (reason) => {
 
 const app = express();
 
-// SSE client registry
-const sseClients = new Set();
+// SSE client registry: userId -> Set(res)
+const sseClients = new Map();
 
 // CORS
 app.use(cors({ origin: '*', credentials: true }));
@@ -45,14 +48,27 @@ app.use('/api', limiter);
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ── Routes ────────────────────────────────────────────────────── */
-app.use('/api',      apiRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api',      apiRoutes);
 
 /* ── Health check ─────────────────────────────────────────────── */
 app.get('/', (_req, res) => res.json({ status: 'ok', message: '🚀 IndiaMART Lead System API', version: '2.0.0' }));
 
 /* ── SSE — Real-time event stream ─────────────────────────────── */
 app.get('/api/events', (req, res) => {
+  const token = req.query.token;
+  if (!token) {
+    return res.status(401).json({ error: 'Token required' });
+  }
+
+  let userId;
+  try {
+    const verified = jwt.verify(token, JWT_SECRET);
+    userId = verified.id;
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection',    'keep-alive');
@@ -65,15 +81,31 @@ app.get('/api/events', (req, res) => {
     if (!res.writableEnded) res.write('event: ping\ndata: heartbeat\n\n');
   }, 25000);
 
-  sseClients.add(res);
-  req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
+  if (!sseClients.has(userId)) {
+    sseClients.set(userId, new Set());
+  }
+  sseClients.get(userId).add(res);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    const clients = sseClients.get(userId);
+    if (clients) {
+      clients.delete(res);
+      if (clients.size === 0) {
+        sseClients.delete(userId);
+      }
+    }
+  });
 });
 
 /* ── Broadcast helper (used by worker) ────────────────────────── */
-function broadcast(event, data) {
+function broadcast(userId, event, data) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const client of sseClients) {
-    if (!client.writableEnded) client.write(payload);
+  const clients = sseClients.get(userId);
+  if (clients) {
+    for (const client of clients) {
+      if (!client.writableEnded) client.write(payload);
+    }
   }
 }
 
@@ -98,17 +130,12 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`✅ Backend running on http://localhost:${PORT}`);
 
-  // Always reset is_running on startup — prevents stale session errors
-  db.prepare('UPDATE config SET is_running = 0 WHERE id = 1').run();
-
-  // Only auto-start worker if valid cookies are present
-  const config = db.prepare('SELECT cookies FROM config WHERE id = 1').get();
-  const hasCookies = config && config.cookies && config.cookies.length > 10 && config.cookies !== '[]';
-
-  if (hasCookies) {
-    console.log('🍪 Cookies found — Auto Mode ready. Click Start to begin.');
-  } else {
-    console.log('ℹ️ No cookies saved yet. Go to Settings → upload your IndiaMART cookies.');
+  // Always reset is_running on startup for all configs
+  try {
+    db.prepare('UPDATE config SET is_running = 0').run();
+    console.log('🔄 Reset auto mode state for all tenants.');
+  } catch (err) {
+    console.error('Failed to reset config running states on startup:', err.message);
   }
 });
 

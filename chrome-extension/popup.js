@@ -20,6 +20,8 @@ const btnSaveUrl    = document.getElementById('btn-save-url');
 const leadList      = document.getElementById('lead-list');
 const leadCountLabel= document.getElementById('lead-count-label');
 const btnClear      = document.getElementById('btn-clear');
+const apiTokenInput = document.getElementById('api-token');
+const btnSaveToken  = document.getElementById('btn-save-token');
 
 let backendUrl = DEFAULT_BACKEND;
 let isCapturing = false;
@@ -27,13 +29,15 @@ let recentLeads = [];
 
 /* ── Load stored state ─────────────────────────────────────────── */
 async function loadState() {
-  const data = await chrome.storage.local.get(['backendUrl', 'isCapturing', 'recentLeads', 'stats']);
+  const data = await chrome.storage.local.get(['backendUrl', 'isCapturing', 'recentLeads', 'stats', 'authToken']);
   backendUrl = data.backendUrl || DEFAULT_BACKEND;
   isCapturing = data.isCapturing || false;
   recentLeads = data.recentLeads || [];
+  const authToken = data.authToken || '';
 
   backendInput.value = backendUrl;
   backendDisplay.textContent = backendUrl.replace('http://', '').replace('https://', '');
+  apiTokenInput.value = authToken;
 
   updateStats(data.stats || {});
   renderLeadList();
@@ -44,13 +48,34 @@ async function loadState() {
 /* ── Check backend connection ──────────────────────────────────── */
 async function checkBackendConnection() {
   try {
-    const res = await fetch(`${backendUrl}/`, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      setStatus('connected', '✅ Backend Connected', `${backendUrl.replace('http://', '')}`);
-    } else {
-      setStatus('disconnected', '⚠️ Backend Error', `HTTP ${res.status}`);
+    const data = await chrome.storage.local.get(['authToken']);
+    const headers = {};
+    if (data.authToken) {
+      headers['Authorization'] = `Bearer ${data.authToken}`;
     }
-  } catch {
+
+    const res = await fetch(`${backendUrl}/`, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) {
+      setStatus('disconnected', '⚠️ Backend Error', `HTTP ${res.status}`);
+      return;
+    }
+
+    if (data.authToken) {
+      const authRes = await fetch(`${backendUrl}/api/auth/me`, {
+        headers,
+        signal: AbortSignal.timeout(4000)
+      });
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        const userEmail = authData.user?.email || 'Authenticated';
+        setStatus('connected', '✅ Connected & Verified', `${userEmail}`);
+      } else {
+        setStatus('disconnected', '🔑 Invalid Token', 'Update API Token in settings');
+      }
+    } else {
+      setStatus('connected', '⚠️ Missing API Token', 'Add token to start capture');
+    }
+  } catch (err) {
     setStatus('disconnected', '❌ Backend Offline', `Cannot reach ${backendUrl.replace('http://', '')}`);
   }
 }
@@ -150,6 +175,15 @@ btnSaveUrl.addEventListener('click', async () => {
   backendDisplay.textContent = newUrl.replace('http://', '').replace('https://', '');
   btnSaveUrl.textContent = '✓';
   setTimeout(() => { btnSaveUrl.textContent = 'Save'; }, 1500);
+  checkBackendConnection();
+});
+
+/* ── Save API Token ────────────────────────────────────────────── */
+btnSaveToken.addEventListener('click', async () => {
+  const newToken = apiTokenInput.value.trim();
+  await chrome.storage.local.set({ authToken: newToken });
+  btnSaveToken.textContent = '✓';
+  setTimeout(() => { btnSaveToken.textContent = 'Save'; }, 1500);
   checkBackendConnection();
 });
 

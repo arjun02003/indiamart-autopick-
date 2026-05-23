@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────────────────────────────
    LeadMed Chrome Extension — Background Service Worker
    Handles: cookie extraction, lead batching, API communication
-───────────────────────────────────────────────────────────────────── */
+   ───────────────────────────────────────────────────────────────────── */
 
 const DEFAULT_BACKEND = 'http://localhost:3001';
 let isCapturing = false;
@@ -48,6 +48,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   return true; // keep async
 });
+
+/* ── Get Authorization headers ─────────────────────────────────── */
+async function getRequestHeaders() {
+  const data = await chrome.storage.local.get(['authToken']);
+  const headers = { 'Content-Type': 'application/json' };
+  if (data.authToken) {
+    headers['Authorization'] = `Bearer ${data.authToken}`;
+  }
+  return headers;
+}
 
 /* ── Start capture ─────────────────────────────────────────────── */
 function startCapture() {
@@ -115,9 +125,10 @@ async function extractAndUploadCookies() {
 
 async function uploadCookiesToBackend(cookies) {
   try {
+    const headers = await getRequestHeaders();
     await fetch(`${backendUrl}/api/login-cookies`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ cookies }),
     });
     console.log('[LeadMed BG] Cookies sent to backend');
@@ -132,9 +143,10 @@ async function processCapturedLead(lead, tabId) {
 
   // Send to backend
   try {
+    const headers = await getRequestHeaders();
     const res = await fetch(`${backendUrl}/api/capture`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(lead),
     });
     const data = await res.json();
@@ -183,9 +195,10 @@ async function retryPendingLeads() {
 
   for (const lead of toRetry) {
     try {
+      const headers = await getRequestHeaders();
       const res = await fetch(`${backendUrl}/api/capture`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(lead),
       });
       if (!res.ok) pendingLeads.push(lead); // still failing, keep
