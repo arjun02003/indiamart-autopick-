@@ -2,6 +2,40 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { getStats, getStatus, startAutoMode, stopAutoMode } from '../services/api';
 import { useAuth } from './AuthContext';
 
+function playAlarmSound() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    // Play a sequence of 3 rapid alarm beeps
+    const playBeep = (startTime) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sawtooth'; // piercing buzzer sound
+      osc.frequency.setValueAtTime(880, startTime); // High A note
+      
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.25);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.3);
+    };
+
+    const now = ctx.currentTime;
+    playBeep(now);
+    playBeep(now + 0.4);
+    playBeep(now + 0.8);
+  } catch (e) {
+    console.error('Audio playback failed:', e);
+  }
+}
+
 /* ── Safe default — prevents null-destructure crashes on hot-reload ── */
 const DEFAULT_LEAD_CTX = {
   stats: { total: 0, accepted: 0, skipped: 0, replied: 0, limit: 100, current: 0, high_priority: 0, avg_score: 0, topCountries: [], topMedicines: [] },
@@ -97,6 +131,7 @@ export function LeadProvider({ children }) {
       // Only notify if user actively clicked Start this session
       if (startedThisSession.current) {
         setSessionExpired(true);
+        playAlarmSound();
         addNotifRef.current?.('warning', '🍪 Cookies expired — go to Settings → re-upload cookies');
       }
     });

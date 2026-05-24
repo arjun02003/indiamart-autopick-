@@ -41,7 +41,7 @@ export default function Dashboard() {
 
       {/* Session expired banner — only shown after user actively tried to start */}
       {sessionExpired && (
-        <div className="alert-banner alert-danger" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '#/settings'}>
+        <div className="alert-banner alert-danger-flash" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '#/settings'}>
           🍪 <strong>Cookies expired</strong> — Go to <u>Settings</u> and re-upload your IndiaMART cookies to continue.
         </div>
       )}
